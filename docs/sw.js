@@ -1,8 +1,8 @@
 /* Service worker: permite instalar la web como app y abrirla aunque falle la conexión.
    Siempre intenta la red primero (para tener datos y versiones al día) y solo usa
    la copia guardada si no hay conexión. Los datos en directo no se guardan. */
-var CACHE = "trafico-zgz-v2";
-var BASE = ["./", "manifest.webmanifest", "icons/icon-192.png",
+var CACHE = "trafico-zgz-v3";
+var BASE = ["./", "manifest.webmanifest", "icons/icon-192-v2.png",
   "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
   "https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"];
 self.addEventListener("install", function (e) {
