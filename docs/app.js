@@ -43,9 +43,10 @@
   // ---------------------------------------------------------------- mapa
   var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   var map = L.map("map", { zoomControl: true, preferCanvas: true }).setView([41.6488, -0.8891], 13);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/" + (dark ? "dark_all" : "rastertiles/voyager") + "/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19, subdomains: "abcd",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a> · Datos: Ayto. Zaragoza, DGT'
+  // Mapa base gratuito de OpenStreetMap (en modo oscuro se oscurece con CSS)
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, className: dark ? "tiles-dark" : "",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Datos: Ayto. Zaragoza, DGT'
   }).addTo(map);
 
   var layers = {
