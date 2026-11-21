@@ -6,8 +6,15 @@
 <title>Tráfico Zaragoza en directo</title>
 <meta name="description" content="Mapa del tráfico de Zaragoza en tiempo real con datos abiertos del Ayuntamiento y de la DGT, e histórico de patrones.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='9' y='2' width='14' height='28' rx='4' fill='%23222'/><circle cx='16' cy='9' r='3.5' fill='%23e5484d'/><circle cx='16' cy='16' r='3.5' fill='%23f5a524'/><circle cx='16' cy='23' r='3.5' fill='%2330a46c'/></svg>">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6bcb">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tráfico ZGZ">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="style.css?v=13">
+<link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
 <div id="app">
@@ -17,7 +24,10 @@
         <h1>Tráfico Zaragoza</h1>
         <p class="sub">Datos abiertos en directo · Ayuntamiento y DGT</p>
       </div>
-      <button id="togglePanel" class="icon-btn" aria-label="Ocultar panel" title="Ocultar panel">⟨</button>
+      <div class="brand-btns">
+        <button id="instalar" class="install-btn" hidden>📲 Instalar app</button>
+        <button id="togglePanel" class="icon-btn" aria-label="Ocultar panel" title="Ocultar panel">⟨</button>
+      </div>
     </header>
 
     <nav class="tabs" role="tablist">
@@ -87,6 +97,7 @@
   <main id="map" aria-label="Mapa"></main>
   <button id="showPanel" class="fab" aria-label="Mostrar panel" hidden>☰ Panel</button>
   <div id="toast" role="status" aria-live="polite"></div>
+  <div id="avisos" role="alert" hidden></div>
 </div>
 
 <dialog id="camDialog">
@@ -98,8 +109,21 @@
   <p class="meta">La imagen se refresca cada 60 s · Fuente: DGT</p>
 </dialog>
 
+<dialog id="iosDialog">
+  <form method="dialog" class="cam-head">
+    <b>Instalar en iPhone o iPad</b>
+    <button class="icon-btn" aria-label="Cerrar">✕</button>
+  </form>
+  <ol class="pasos">
+    <li>Abre esta página en <b>Safari</b>.</li>
+    <li>Pulsa el botón <b>Compartir</b> (el cuadrado con la flecha hacia arriba).</li>
+    <li>Elige <b>Añadir a pantalla de inicio</b> y pulsa <b>Añadir</b>.</li>
+  </ol>
+  <p class="meta">Aparecerá el icono «Tráfico ZGZ» y se abrirá a pantalla completa, como una app.</p>
+</dialog>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

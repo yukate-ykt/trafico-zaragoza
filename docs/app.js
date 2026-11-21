@@ -44,6 +44,40 @@
   var toastT;
   function toast(msg) { var t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("show"); }, 3500); }
 
+  // ---------------------------------------------------------------- salud de las fuentes
+  // Si una fuente deja de responder se muestra un cartel con la hora del último dato bueno.
+  var FUENTES = {
+    recolector: { txt: "El recolector automático no se ejecuta" },
+    dgt: { txt: "La DGT no da incidencias", col: "dgt_incidencias" },
+    paneles: { txt: "La DGT no da los mensajes de los paneles", col: "dgt_paneles" },
+    cortes: { txt: "El Ayuntamiento no da los cortes de tráfico", col: "zgz_cortes" },
+    tranvia: { txt: "El Ayuntamiento no da datos del tranvía", col: "zgz_tranvia" },
+    bus: { txt: "El Ayuntamiento no da las paradas de autobús" },
+    conservacion: { txt: "El Ayuntamiento no da las obras de conservación" },
+    eventos: { txt: "La agenda municipal no responde" },
+    camzgz: { txt: "El Ayuntamiento no da sus cámaras" }
+  };
+  var salud = {}, okRecolector = {};
+  function fuenteOk(k) { salud[k] = { fallo: false, ok: new Date() }; pintarSalud(); }
+  function fuenteFallo(k, desde) { var s = salud[k] || {}; s.fallo = true; if (desde) s.ok = new Date(desde); salud[k] = s; pintarSalud(); }
+  function horaDesde(d) {
+    if (!d || isNaN(d)) return " ahora mismo";
+    var hoy = new Date().toLocaleDateString("es-ES", { timeZone: "Europe/Madrid" }) === d.toLocaleDateString("es-ES", { timeZone: "Europe/Madrid" });
+    var h = d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
+    return hoy ? " desde las " + h : " desde el " + d.toLocaleDateString("es-ES", { day: "numeric", month: "numeric", timeZone: "Europe/Madrid" }) + " a las " + h;
+  }
+  function pintarSalud() {
+    var el = document.getElementById("avisos"); if (!el) return;
+    var html = "";
+    Object.keys(FUENTES).forEach(function (k) {
+      var s = salud[k]; if (!s || !s.fallo) return;
+      var f = FUENTES[k], d = s.ok || (f.col && okRecolector[f.col] ? new Date(okRecolector[f.col]) : null);
+      html += "<li>⚠️ " + esc(f.txt) + esc(horaDesde(d)) + ".</li>";
+    });
+    el.innerHTML = html ? "<ul>" + html + '</ul><small>Se vuelve a intentar solo. El resto de capas sigue funcionando.</small>' : "";
+    el.hidden = !html;
+  }
+
   // ---------------------------------------------------------------- mapa
   var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
   var map = L.map("map", { zoomControl: true, preferCanvas: true }).setView([41.6488, -0.8891], 13);
@@ -154,7 +188,7 @@
           .bindTooltip(p.texto || "Panel con pictograma").addTo(g);
       });
       setCount("paneles", n);
-    }).catch(function () { setCount("paneles", "–"); });
+    }).catch(function () { setCount("paneles", "–"); fuenteFallo("paneles"); });
   }
 
   // ---------------------------------------------------------------- capa 2: incidencias DGT
@@ -251,8 +285,8 @@
           .on("popupclose", function () { if (z) z.setStyle({ weight: 1, opacity: .5, fillOpacity: .08 }); })
           .addTo(g);
       });
-      setCount("camzgz", (r[0].features || []).length);
-    }).catch(function () { setCount("camzgz", "sin conexión"); });
+      setCount("camzgz", (r[0].features || []).length); fuenteOk("camzgz");
+    }).catch(function () { setCount("camzgz", "sin conexión"); fuenteFallo("camzgz"); });
   }
 
   // ---------------------------------------------------------------- eventos de hoy (Agenda de Zaragoza, Ayuntamiento)
@@ -286,7 +320,7 @@
       });
       $("eventosMeta").textContent = lista.length + " eventos puntuales hoy · " + lista.filter(function (e) { return e.gran; }).length + " en recintos de gran aforo";
       setCount("eventos", lista.length);
-    }).catch(function () { setCount("eventos", "sin conexión"); $("eventosMeta").textContent = "No se ha podido consultar la agenda."; });
+    }).catch(function () { setCount("eventos", "sin conexión"); fuenteFallo("eventos"); $("eventosMeta").textContent = "No se ha podido consultar la agenda."; });
   }
 
   // ---------------------------------------------------------------- capa 4: cortes del Ayuntamiento
@@ -324,11 +358,11 @@
       });
       $("cortesList").innerHTML = html || "<li><small>No hay cortes publicados ahora mismo.</small></li>";
       $("cortesMeta").textContent = res.length + " activas · en directo del Ayuntamiento · consultado " + new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
-      setCount("cortes", res.length);
+      setCount("cortes", res.length); fuenteOk("cortes");
       Array.prototype.forEach.call($("cortesList").querySelectorAll("li[data-id]"), function (li) {
         li.addEventListener("click", function () { var m = corteMarkers[li.getAttribute("data-id")]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } });
       });
-    }).catch(function () { $("cortesMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; });
+    }).catch(function () { $("cortesMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; fuenteFallo("cortes"); });
   }
 
   // ---------------------------------------------------------------- obras de conservación previstas para hoy (Ayuntamiento)
@@ -358,11 +392,11 @@
       });
       $("consList").innerHTML = html || "<li><small>No hay obras de conservación previstas hoy.</small></li>";
       $("consMeta").textContent = n + " previstas hoy (" + act + " con trabajo hoy) · agenda diaria del Ayuntamiento";
-      setCount("conservacion", n);
+      setCount("conservacion", n); fuenteOk("conservacion");
       Array.prototype.forEach.call($("consList").querySelectorAll("li[data-id]"), function (li) {
         li.addEventListener("click", function () { var m = consMarkers[li.getAttribute("data-id")]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } });
       });
-    }).catch(function () { $("consMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; setCount("conservacion", "sin conexión"); });
+    }).catch(function () { $("consMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; setCount("conservacion", "sin conexión"); fuenteFallo("conservacion"); });
   }
 
   // ---------------------------------------------------------------- capa 5a: tranvía (paradas + posición estimada)
@@ -471,8 +505,8 @@
         });
       });
       var total = tramFlota.count();
-      setCount("tranvia", total + " en marcha · " + activas + " paradas");
-    }).catch(function () { setCount("tranvia", "sin conexión"); });
+      setCount("tranvia", total + " en marcha · " + activas + " paradas"); fuenteOk("tranvia");
+    }).catch(function () { setCount("tranvia", "sin conexión"); fuenteFallo("tranvia"); });
   }
 
   // ---------------------------------------------------------------- capa 5b: autobús (postes; llegada al pulsar)
@@ -487,8 +521,8 @@
           .on("popupopen", function (e) { busPopup(e.popup, r); })
           .addTo(g);
       });
-      busLoaded = true; setCount("bus", res.length + " paradas"); updateBusVisibility();
-    }).catch(function () { setCount("bus", "sin conexión"); });
+      busLoaded = true; setCount("bus", res.length + " paradas"); updateBusVisibility(); fuenteOk("bus");
+    }).catch(function () { setCount("bus", "sin conexión"); fuenteFallo("bus"); });
   }
   function busPopup(popup, r) {
     fetchJSON(URLS.poste(r.id), true).then(function (d) {
@@ -633,8 +667,13 @@
   function loadEstado() {
     return fetchJSON(URLS.estado, true).then(function (e) {
       var errs = Object.keys(e.errores || {});
+      okRecolector = e.ultimo_ok || {};
+      var edad = (Date.now() - new Date(e.ultima_ejecucion)) / 60000;
+      if (edad > 35) fuenteFallo("recolector", e.ultima_ejecucion); else fuenteOk("recolector");
+      if (errs.indexOf("dgt_incidencias") >= 0) fuenteFallo("dgt"); else if (salud.dgt) fuenteOk("dgt");
+      if (errs.indexOf("dgt_paneles") >= 0) fuenteFallo("paneles"); else if (salud.paneles) fuenteOk("paneles");
       $("estadoMeta").textContent = "Última ejecución del recolector: " + fmtFecha(e.ultima_ejecucion) + " (" + hace(e.ultima_ejecucion) + ")" + (errs.length ? " · fuentes con error: " + errs.join(", ") : " · todas las fuentes respondieron.");
-    }).catch(function () {});
+    }).catch(function () { fuenteFallo("recolector"); });
   }
 
   // ---------------------------------------------------------------- interfaz
@@ -646,6 +685,19 @@
   });
   $("togglePanel").addEventListener("click", function () { $("panel").classList.add("hidden"); $("showPanel").hidden = false; setTimeout(function () { map.invalidateSize(); }, 50); });
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
+
+  // ---------------------------------------------------------------- instalar como app (Android, iPhone, ordenador)
+  if ("serviceWorker" in navigator) { window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }); }
+  var instalada = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+  var esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  var avisoInstalar = null;
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); avisoInstalar = e; if (!instalada) $("instalar").hidden = false; });
+  window.addEventListener("appinstalled", function () { $("instalar").hidden = true; toast("App instalada. Ya la tienes en la pantalla de inicio."); });
+  if (esIOS && !instalada) $("instalar").hidden = false;
+  $("instalar").addEventListener("click", function () {
+    if (avisoInstalar) { avisoInstalar.prompt(); avisoInstalar.userChoice.then(function () { avisoInstalar = null; $("instalar").hidden = true; }); }
+    else if (esIOS) $("iosDialog").showModal();
+  });
 
   renderLayerList();
   loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz(); loadEventos();

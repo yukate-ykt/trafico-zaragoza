@@ -427,6 +427,26 @@ def calcular_patrones():
     })
 
 
+def ultimo_ok_historico(campo):
+    """Busca en las fotos de los dos últimos días la última con datos de ese campo."""
+    carpeta = os.path.join(DATA, "historico")
+    try:
+        ficheros = sorted(f for f in os.listdir(carpeta) if f.endswith(".jsonl"))[-2:]
+    except OSError:
+        return None
+    ultimo = None
+    for f in ficheros:
+        with open(os.path.join(carpeta, f), encoding="utf-8") as fh:
+            for linea in fh:
+                try:
+                    d = json.loads(linea)
+                except ValueError:
+                    continue
+                if d.get(campo):
+                    ultimo = d.get("t")
+    return ultimo
+
+
 def main():
     os.makedirs(DATA, exist_ok=True)
     t = now()
@@ -492,6 +512,16 @@ def main():
         guardar_foto(t, inc, cortes, tiempos, tranvia, fluidez)
     calcular_patrones()
 
+    # Última vez que respondió cada fuente: la web lo usa para avisar «no da datos desde las HH:MM»
+    ok = estado.get("ultimo_ok") or {}
+    for k in ("dgt_incidencias", "dgt_paneles", "zgz_cortes", "zgz_tiempos", "zgz_tranvia"):
+        if k not in errores:
+            ok[k] = t.isoformat(timespec="minutes")
+        elif k not in ok and k in ("zgz_cortes", "zgz_tiempos", "zgz_tranvia"):
+            v = ultimo_ok_historico(k[4:])
+            if v:
+                ok[k] = v
+    estado["ultimo_ok"] = ok
     estado.update({"ultima_ejecucion": t.isoformat(timespec="seconds"), "errores": errores,
                    "incidencias_dgt": len(inc), "cortes_ayto": len(cortes)})
     write_json(os.path.join(DATA, "estado.json"), estado)
