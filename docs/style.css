@@ -94,3 +94,5 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
 .leaflet-popup-content td { border-bottom-color: rgba(0,0,0,.15); }
 .leaflet-popup-content .muted { color: #222; }
 .leaflet-tooltip { background: rgba(255,255,255,.8); text-shadow: 0 0 3px #fff; }
+/* El halo blanco es para el texto negro; en etiquetas de color con letra blanca se quita para que no se emborrone */
+.leaflet-popup-content .tag, .leaflet-popup-content .emo-lbl, .leaflet-popup-content .vms, .leaflet-popup-content [style*="color:#fff"] { text-shadow: none; }

@@ -7,7 +7,7 @@
 <meta name="description" content="Mapa del tráfico de Zaragoza en tiempo real con datos abiertos del Ayuntamiento y de la DGT, e histórico de patrones.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='9' y='2' width='14' height='28' rx='4' fill='%23222'/><circle cx='16' cy='9' r='3.5' fill='%23e5484d'/><circle cx='16' cy='16' r='3.5' fill='%23f5a524'/><circle cx='16' cy='23' r='3.5' fill='%2330a46c'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
 <div id="app">
@@ -38,7 +38,7 @@
           <li>🚗💥 Accidente</li><li>⚠️ Vehículo averiado o detenido, obstáculo</li><li>🚗🚙 Afección al tráfico / retención</li>
           <li>🚜 Obras</li><li>🚧 Corte de calle o carretera</li><li>🎟️ Evento de hoy · 🎤 evento en recinto de gran aforo</li><li>📷 Cámara DGT (pulsa para ver la imagen)</li><li>🎥 Cámara del Ayuntamiento y zona que vigila (sin imagen pública)</li>
           <li>⏱️ Panel de tiempos de recorrido</li><li>📟 Panel luminoso de la DGT (pulsa para ver el mensaje)</li><li>🚦 Fluidez por calles (se activa si el Ayuntamiento vuelve a publicarla)</li><li>🚉 Parada de tranvía (borde verde: llega en ≤5 min, naranja ≤10, rojo más)</li>
-          <li>🚋 Tranvía en marcha (posición estimada, se mueve en el mapa)</li><li>🚏 Parada de autobús (acerca el mapa para verlas)</li><li>🚌 Autobús en marcha de la línea elegida (posición estimada)</li>
+          <li>🚋 Tranvía en marcha (posición estimada, se mueve en el mapa)</li><li>🚏 Parada de autobús (acerca el mapa para verlas)</li><li>🚌 Autobús en marcha de la línea elegida (posición estimada)</li><li>🚲 Estación Bizi (acerca el mapa para verlas): el número son las bicis libres (borde verde: más de 3, naranja: 1–3, rojo: ninguna)</li><li>🅿️ Calles con zona azul (línea azul) y naranja (línea naranja); el trazo discontinuo marca las zonas reguladoras</li>
         </ul>
       </details>
       <h2>Incidencias DGT en accesos y rondas</h2>
@@ -72,6 +72,8 @@
         <li><b>Eventos</b>: Agenda de Zaragoza del Ayuntamiento (conciertos, teatro, ferias…). Solo eventos de 3 días o menos.</li>
         <li><b>Tranvía</b>: tiempos de llegada en cada parada. En directo, cada minuto.</li>
         <li><b>Autobús</b>: tiempos de llegada en cada poste. Se consultan al pulsar sobre la parada.</li>
+        <li><b>Bizi</b>: bicis y anclajes libres en cada estación, del servicio del Ayuntamiento. Cada 2 minutos.</li>
+        <li><b>Zona azul y naranja</b>: tramos de calle con estacionamiento regulado y sus plazas (Ayuntamiento). La ocupación por zona es la última que publicó el Ayuntamiento, de 2019.</li>
         <li><b>Paneles luminosos</b>: mensajes de los paneles de la DGT en la Z-40 y accesos. Cada 10 minutos.</li>
       </ul>
       <h2>Qué no hay en abierto</h2>
@@ -96,6 +98,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 </body>
 </html>
