@@ -239,17 +239,63 @@
     var out = [];
     for (var i = 0; i < seq.length; i++) {
       var s = seq[i]; if (s.eta == null) continue;
-      if (s.eta === 0) { out.push({ pos: s.pos, junto: s, eta: 0, info: s.info }); continue; }
+      if (s.eta === 0) { out.push({ pos: s.pos, junto: s, eta: 0, info: s.info, i: i, prog: i }); continue; }
       var p = seq[i - 1];
       if (!p || p.eta == null || p.corte) continue;
       if (s.eta < p.eta) {
         var tSeg = Math.max(1, distM(p.pos, s.pos) * minPorMetro);
         var f = Math.min(0.95, Math.max(0.05, 1 - s.eta / tSeg));
-        out.push({ pos: lerp(p.pos, s.pos, f), junto: s, eta: s.eta, info: s.info });
+        out.push({ pos: lerp(p.pos, s.pos, f), junto: s, eta: s.eta, info: s.info, i: i, prog: i - 1 + f });
       }
     }
     return out;
   }
+  /* Flota: mantiene los vehículos de cada sentido entre actualizaciones y los mueve suavemente.
+     Cada vehículo avanza hacia su siguiente parada para llegar justo cuando dicen los tiempos de llegada;
+     al llegar espera unos segundos y sigue hacia la siguiente. Cada nueva consulta corrige su posición. */
+  function Flota(group) { this.group = group; this.dirs = {}; }
+  Flota.prototype.clear = function () { this.group.clearLayers(); this.dirs = {}; };
+  Flota.prototype.count = function () { var n = 0, d = this.dirs; Object.keys(d).forEach(function (k) { n += d[k].veh.length; }); return n; };
+  Flota.prototype.update = function (key, seq, ests, minPorMetro, build) {
+    var prev = this.dirs[key] ? this.dirs[key].veh.slice() : [], now = Date.now(), group = this.group, out = [];
+    ests.sort(function (a, b) { return b.prog - a.prog; });
+    ests.forEach(function (e) {
+      var best = null, bd = 1e9;
+      prev.forEach(function (o) { if (o.used) return; var d = e.prog - o.p; if (d > -0.8 && d < 2 && Math.abs(d) < bd) { bd = Math.abs(d); best = o; } });
+      var b = build(e), v;
+      if (best) { best.used = true; v = best; v.marker.setPopupContent(b.popup); v.marker.setTooltipContent(b.tip); }
+      else { v = { pd: e.prog, marker: L.marker(e.pos, { icon: b.icon, zIndexOffset: 1000 }).bindPopup(b.popup).bindTooltip(b.tip).addTo(group) }; }
+      v.p = Math.max(e.prog, best ? Math.min(best.p, e.i) : e.prog);
+      v.i = e.i; v.arrive = now + e.eta * 60000;
+      out.push(v);
+    });
+    prev.forEach(function (o) { if (!o.used) group.removeLayer(o.marker); });
+    out.forEach(function (v) { v.used = false; });
+    this.dirs[key] = { seq: seq, veh: out, mpm: minPorMetro };
+  };
+  Flota.prototype.tick = function (dt) {
+    var now = Date.now(), dirs = this.dirs;
+    Object.keys(dirs).forEach(function (k) {
+      var D = dirs[k], seq = D.seq;
+      D.veh.forEach(function (v) {
+        if (now < v.arrive) {
+          var rest = (v.arrive - now) / 1000;
+          v.p += (v.i - v.p) * Math.min(1, dt / rest);
+        } else if (now > v.arrive + 20000 && v.i + 1 < seq.length && !seq[v.i].corte) {
+          var tSeg = Math.max(60, distM(seq[v.i].pos, seq[v.i + 1].pos) * D.mpm * 60);
+          v.p = Math.min(v.i + 0.9, v.p + dt / tSeg);
+        } else { v.p = Math.max(v.p, Math.min(v.i, v.p + dt / 10)); }
+        v.pd += (v.p - v.pd) * Math.min(1, dt * 1.2);
+        var kk = Math.floor(v.pd), f = v.pd - kk;
+        var pos = kk >= seq.length - 1 ? seq[seq.length - 1].pos : (kk < 0 ? seq[0].pos : lerp(seq[kk].pos, seq[kk + 1].pos, f));
+        v.marker.setLatLng(pos);
+      });
+    });
+  };
+  var flotas = [];
+  setInterval(function () { flotas.forEach(function (f) { f.tick(0.25); }); }, 250);
+  var tramFlota = new Flota(tramVeh); flotas.push(tramFlota);
+
   function loadTranvia() {
     return fetchJSON(URLS.tranvia, true).then(function (d) {
       var res = d.result || []; var activas = 0;
@@ -261,31 +307,32 @@
         var min = mins.length ? Math.min.apply(null, mins) : null; if (min != null) activas++;
         var primero = dest.filter(function (x) { return x.minutos === min; })[0];
         var n = parseInt(r.id, 10); if (!isNaN(n) && dirs[n % 10]) dirs[n % 10].push({ id: n, title: r.title, pos: [c[1], c[0]], eta: min, info: primero });
-        var popup = "<h3>🚊 Parada " + esc(r.title) + "</h3>" + (dest.length ? "<table>" + dest.map(function (x) {
+        var popup = "<h3>🚉 Parada " + esc(r.title) + "</h3>" + (dest.length ? "<table>" + dest.map(function (x) {
           return "<tr><td>" + esc(x.linea) + "</td><td>" + esc(x.destino) + "</td><td><b>" + esc(x.minutos) + " min</b></td></tr>";
         }).join("") + "</table>" : '<p class="muted">Sin llegadas previstas ahora.</p>') +
           '<p class="muted">Tiempo real · actualizado ' + esc((r.lastUpdated || "").slice(11, 16)) + "</p>";
         var m = tranviaMarkers[r.id];
         var tip = r.title + (min != null ? " · próximo en " + min + " min" : "");
-        if (m) { m.setIcon(emojiIcon("🚊", colorEspera(min), { size: 24 })); m.setPopupContent(popup); m.setTooltipContent(tip); }
-        else { tranviaMarkers[r.id] = L.marker([c[1], c[0]], { icon: emojiIcon("🚊", colorEspera(min), { size: 24 }) }).bindPopup(popup).bindTooltip(tip).addTo(layers.tranvia.group); }
+        if (m) { m.setIcon(emojiIcon("🚉", colorEspera(min), { size: 22, cls: "stop" })); m.setPopupContent(popup); m.setTooltipContent(tip); }
+        else { tranviaMarkers[r.id] = L.marker([c[1], c[0]], { icon: emojiIcon("🚉", colorEspera(min), { size: 22, cls: "stop" }) }).bindPopup(popup).bindTooltip(tip).addTo(layers.tranvia.group); }
       });
       // Sentido 1 (id acabado en 1): hacia Mago de Oz, ids crecientes. Sentido 2: hacia Av. Academia, ids decrecientes.
       dirs[1].sort(function (a, b) { return a.id - b.id; });
       dirs[2].sort(function (a, b) { return b.id - a.id; });
-      tramVeh.clearLayers(); var total = 0;
       [1, 2].forEach(function (k) {
-        estimarVehiculos(dirs[k], 1 / 300).forEach(function (v) {
-          total++;
+        tramFlota.update("d" + k, dirs[k], estimarVehiculos(dirs[k], 1 / 300), 1 / 300, function (v) {
           var destino = v.info ? v.info.destino : (k === 1 ? "MAGO DE OZ" : "AVENIDA ACADEMIA");
-          var doble = /doble/i.test(destino || "");
-          L.marker(v.pos, { icon: emojiIcon("🚋", COLORS.green, { size: 34, cls: "veh", label: k === 1 ? "↓" : "↑" }), zIndexOffset: 1000 })
-            .bindPopup("<h3>🚋 Tranvía L1" + (doble ? " (doble)" : "") + "</h3><p>Hacia <b>" + esc(String(destino).replace(/ - Tranvia doble/i, "")) + "</b><br>" +
+          var doble = /doble/i.test(destino || ""), dest = String(destino).replace(/ - Tranvia doble/i, "");
+          return {
+            icon: emojiIcon("🚋", COLORS.green, { size: 34, cls: "veh", label: k === 1 ? "↓" : "↑" }),
+            tip: "Tranvía hacia " + dest,
+            popup: "<h3>🚋 Tranvía L1" + (doble ? " (doble)" : "") + "</h3><p>Hacia <b>" + esc(dest) + "</b><br>" +
               (v.eta === 0 ? "En la parada <b>" + esc(v.junto.title) + "</b>" : "Llega a <b>" + esc(v.junto.title) + "</b> en " + v.eta + " min") +
-              '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS).</p>')
-            .bindTooltip("Tranvía hacia " + String(destino).replace(/ - Tranvia doble/i, "")).addTo(tramVeh);
+              '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS). Se corrige cada 30 s.</p>'
+          };
         });
       });
+      var total = tramFlota.count();
       setCount("tranvia", total + " en marcha · " + activas + " paradas");
     }).catch(function () { setCount("tranvia", "sin conexión"); });
   }
@@ -297,7 +344,7 @@
       var g = layers.bus.group; var res = d.result || [];
       res.forEach(function (r) {
         var c = r.geometry && r.geometry.coordinates; if (!c) return;
-        L.marker([c[1], c[0]], { icon: emojiIcon("🚌", COLORS.blue, { size: 22, cls: "stop" }) })
+        L.marker([c[1], c[0]], { icon: emojiIcon("🚏", "#c7cbd1", { size: 20, cls: "stop" }) })
           .bindPopup("<h3>🚏 " + esc(r.title) + '</h3><p class="muted">Consultando llegadas…</p>')
           .on("popupopen", function (e) { busPopup(e.popup, r); })
           .addTo(g);
@@ -321,7 +368,8 @@
   map.on("zoomend", updateBusVisibility);
 
   // ---------------------------------------------------------------- capa 5c: autobuses en circulación de una línea (posición estimada)
-  var busVeh = L.layerGroup().addTo(map), busLinea = null, busTimer = null, busCache = {};
+  var busVeh = L.layerGroup().addTo(map), busRuta = L.layerGroup().addTo(busVeh), busFlota = new Flota(L.layerGroup().addTo(busVeh)), busLinea = null, busTimer = null, busCache = {};
+  flotas.push(busFlota);
   function parseEta(t) {
     if (!t) return null;
     if (/en la parada/i.test(t)) return 0;
@@ -369,27 +417,30 @@
             var dn = normDest(x.destino); (porDestino[dn] = porDestino[dn] || []).push({ title: p.title, pos: p.pos, eta: parseEta(x.primero), info: x });
           });
         });
-        busVeh.clearLayers();
-        L1.trazado.forEach(function (ln) { L.polyline(ln, { color: COLORS.blue, weight: 4, opacity: .35, interactive: false }).addTo(busVeh); });
-        var total = 0;
+        busRuta.clearLayers();
+        L1.trazado.forEach(function (ln) { L.polyline(ln, { color: COLORS.blue, weight: 4, opacity: .35, interactive: false }).addTo(busRuta); });
+        var vistos = {};
         Object.keys(porDestino).forEach(function (dn) {
-          var seq = porDestino[dn];
+          var seq = porDestino[dn]; vistos[dn] = true;
           for (var i = 1; i < seq.length; i++) if (distM(seq[i - 1].pos, seq[i].pos) > 1500) seq[i - 1].corte = true;
-          estimarVehiculos(seq, 1 / 230).forEach(function (v) {
-            total++;
-            L.marker(v.pos, { icon: emojiIcon("🚌", COLORS.blue, { size: 34, cls: "veh", label: id }), zIndexOffset: 1000 })
-              .bindPopup("<h3>🚌 Línea " + esc(id) + "</h3><p>Hacia <b>" + esc(dn) + "</b><br>" +
+          busFlota.update(dn, seq, estimarVehiculos(seq, 1 / 230), 1 / 230, function (v) {
+            return {
+              icon: emojiIcon("🚌", COLORS.blue, { size: 34, cls: "veh", label: id }),
+              tip: "Línea " + id + " hacia " + dn,
+              popup: "<h3>🚌 Línea " + esc(id) + "</h3><p>Hacia <b>" + esc(dn) + "</b><br>" +
                 (v.eta === 0 ? "En la parada <b>" + esc(v.junto.title) + "</b>" : "Llega a <b>" + esc(v.junto.title) + "</b> en " + v.eta + " min") +
-                '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS).</p>')
-              .bindTooltip("Línea " + id + " hacia " + dn).addTo(busVeh);
+                '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS).</p>'
+            };
           });
         });
+        Object.keys(busFlota.dirs).forEach(function (k) { if (!vistos[k]) busFlota.update(k, busFlota.dirs[k].seq, [], 1 / 230, null); });
+        var total = busFlota.count();
         $("busEstado").textContent = "Línea " + id + ": " + total + " autobuses en circulación (estimado) · " + ok + " paradas consultadas · " + new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }) + ". Se actualiza cada minuto.";
       });
     }).catch(function () { $("busEstado").textContent = "No se ha podido consultar la línea " + id + " ahora."; });
   }
   $("busLinea").addEventListener("change", function () {
-    busLinea = this.value || null; clearInterval(busTimer); busVeh.clearLayers();
+    busLinea = this.value || null; clearInterval(busTimer); busRuta.clearLayers(); busFlota.clear();
     if (!busLinea) { $("busEstado").textContent = ""; return; }
     cargarBuses(); busTimer = setInterval(cargarBuses, 60 * 1000);
     paradasLinea(busLinea).then(function (L1) { var pts = L1.paradas.map(function (p) { return p.pos; }); if (pts.length) map.fitBounds(pts, { padding: [30, 30] }); });
@@ -461,7 +512,7 @@
   renderLayerList();
   loadLineas();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
-  setInterval(loadTranvia, 60 * 1000);
+  setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
   setInterval(function () { loadDGT(); loadEstado(); }, 2 * 60 * 1000);
   setInterval(loadCortes, 5 * 60 * 1000);
