@@ -10,6 +10,9 @@
     postes: ZGZ + "/urbanismo-infraestructuras/transporte-urbano/poste-autobus.json?rows=-1&fl=id,title,geometry&srsname=wgs84",
     poste: function (id) { return ZGZ + "/urbanismo-infraestructuras/transporte-urbano/poste-autobus/" + encodeURIComponent(id) + ".json"; },
     dgtInc: "data/dgt_incidencias.json",
+    dgtPan: "data/dgt_paneles.json",
+    fluidez: "data/zgz_fluidez.json",
+    tramos: "data/zgz_tramos.json",
     dgtCam: "data/dgt_camaras.json",
     patrones: "data/patrones.json",
     estado: "data/estado.json"
@@ -50,6 +53,8 @@
   }).addTo(map);
 
   var layers = {
+    fluidez: { name: "Fluidez de calles (sensores Ayto.)", emoji: "🚦", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
+    paneles: { name: "Paneles luminosos DGT (mensajes)", emoji: "📟", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tiempos: { name: "Tráfico urbano: tiempos de recorrido", emoji: "⏱️", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
     dgt: { name: "Incidencias DGT (Z-40, A-2, A-23…)", emoji: "⚠️", color: COLORS.red, group: L.layerGroup(), on: true, count: "–" },
     camaras: { name: "Cámaras DGT (imagen en directo)", emoji: "📷", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
@@ -110,6 +115,42 @@
       });
       setCount("tiempos", conDatos + "/" + (d.result || []).length);
     }).catch(function () { setCount("tiempos", "sin conexión"); });
+  }
+
+  // ---------------------------------------------------------------- capa 0: fluidez por tramos (sensores del Ayuntamiento)
+  // El Ayuntamiento dejó de publicarla en marzo de 2025; la capa se activa sola si vuelve a publicarse.
+  var tramosGeo = null;
+  var FLUIDEZ = { g: ["#30a46c", "Fluido"], y: ["#f5a524", "Denso"], r: ["#e5484d", "Congestionado"], b: ["#1c2024", "Cortado"] };
+  function loadFluidez() {
+    return fetchJSON(URLS.fluidez, true).then(function (f) {
+      var g = layers.fluidez.group;
+      if (!f.activo) { g.clearLayers(); setCount("fluidez", "sin datos desde " + fmtFecha(f.timestamp).slice(0, 10)); return; }
+      return (tramosGeo ? Promise.resolve(tramosGeo) : fetchJSON(URLS.tramos).then(function (t) { tramosGeo = t.tramos; return tramosGeo; })).then(function (tr) {
+        g.clearLayers(); var n = 0;
+        tr.forEach(function (t) {
+          var c = f.estados.charAt(t[0]), st = FLUIDEZ[c]; if (!st) return; n++;
+          L.polyline(t[2], { color: st[0], weight: 5, opacity: .9 }).bindTooltip(t[1].replace(/^\d+\./, "") + " · " + st[1]).addTo(g);
+        });
+        setCount("fluidez", n + " tramos · " + fmtFecha(f.timestamp).slice(11));
+      });
+    }).catch(function () { setCount("fluidez", "–"); });
+  }
+
+  // ---------------------------------------------------------------- paneles luminosos DGT
+  function loadPaneles() {
+    return fetchJSON(URLS.dgtPan, true).then(function (d) {
+      var g = layers.paneles.group; g.clearLayers(); var n = 0;
+      (d.paneles || []).forEach(function (p) {
+        if (!p.texto && !(p.pictogramas || []).length) return; n++;
+        var pics = (p.pictogramas || []).map(function (u) { return '<img src="' + esc(u) + '" alt="" style="height:42px;margin:2px">'; }).join("");
+        L.marker([p.lat, p.lon], { icon: emojiIcon("📟", COLORS.orange, { size: 24 }) })
+          .bindPopup("<h3>📟 Panel " + esc(p.carretera) + " km " + esc(p.km) + "</h3>" + (pics ? "<div>" + pics + "</div>" : "") +
+            (p.texto ? '<p class="vms">' + esc(p.texto).replace(/ \/ /g, "<br>") + "</p>" : "") +
+            '<p class="muted">' + (p.destino ? "Sentido " + esc(p.destino) + " · " : "") + "Mensaje desde " + esc(fmtFecha(p.hora)) + " · Fuente: DGT</p>")
+          .bindTooltip(p.texto || "Panel con pictograma").addTo(g);
+      });
+      setCount("paneles", n);
+    }).catch(function () { setCount("paneles", "–"); });
   }
 
   // ---------------------------------------------------------------- capa 2: incidencias DGT
@@ -510,11 +551,11 @@
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
 
   renderLayerList();
-  loadLineas();
+  loadLineas(); loadFluidez(); loadPaneles();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
-  setInterval(function () { loadDGT(); loadEstado(); }, 2 * 60 * 1000);
+  setInterval(function () { loadDGT(); loadEstado(); loadPaneles(); loadFluidez(); }, 2 * 60 * 1000);
   setInterval(loadCortes, 5 * 60 * 1000);
   setInterval(loadPatrones, 15 * 60 * 1000);
 })();

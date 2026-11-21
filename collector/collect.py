@@ -35,6 +35,10 @@ ZGZ_CORTES = ZGZ + "/via-publica/incidencia.json?rows=500&srsname=wgs84"
 ZGZ_TIEMPOS = ZGZ + "/tiempos-recorrido.json?start=0&rows=-1&srsname=wgs84"
 ZGZ_TRANVIA = ZGZ + "/urbanismo-infraestructuras/transporte-urbano/parada-tranvia.json?rows=200&srsname=wgs84"
 
+DGT_PANELES_UBIC = "https://nap.dgt.es/datex2/v3/dgt/DevicePublication/vms_datex2_v37.xml"
+DGT_PANELES_ESTADO = "https://nap.dgt.es/datex2/v3/dgt/VmsPublication/datex2_v37.xml"
+ZGZ_FLUIDEZ = "https://www.zaragoza.es/trafico/estado/estado.json"
+
 UA = "trafico-zaragoza-opendata/1.0"
 
 CAUSAS = {
@@ -216,6 +220,63 @@ def dgt_camaras():
     return {"fuente": "DGT – Punto de Acceso Nacional (cámaras)", "camaras": out}
 
 
+# ---------------------------------------------------------------- DGT paneles luminosos
+def dgt_paneles_ubicacion():
+    root = ET.fromstring(get(DGT_PANELES_UBIC))
+    out = {}
+    for dev in root.iter():
+        if local(dev.tag) != "device":
+            continue
+        lat, lon = text(dev, "latitude"), text(dev, "longitude")
+        if not (lat and lon):
+            continue
+        lat, lon = float(lat), float(lon)
+        if in_bbox(lat, lon):
+            out[dev.attrib.get("id")] = {"carretera": text(dev, "roadName"), "destino": text(dev, "roadDestination"),
+                                         "km": text(dev, "kilometerPoint"), "lat": lat, "lon": lon}
+    return out
+
+
+def dgt_paneles(ubic):
+    root = ET.fromstring(get(DGT_PANELES_ESTADO))
+    out = []
+    for st in root.iter():
+        if local(st.tag) != "vmsControllerStatus":
+            continue
+        ref = first(st, "vmsControllerReference")
+        pid = ref.attrib.get("id") if ref is not None else None
+        if pid not in ubic:
+            continue
+        lineas, pictos, hora = [], [], text(st, "timeLastSet")
+        for e in st.iter():
+            n = local(e.tag)
+            if n == "textLine" and e.text and e.text.strip():
+                limpio = " ".join(w for w in e.text.split() if not w.startswith("@"))
+                if limpio and limpio not in lineas:
+                    lineas.append(limpio)
+            elif n == "pictogramDisplayUrl" and e.text:
+                if e.text.strip() not in pictos:
+                    pictos.append(e.text.strip())
+        d = dict(ubic[pid]); d.update({"id": pid, "texto": " / ".join(lineas) or None, "pictogramas": pictos, "hora": hora})
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------- Ayuntamiento: fluidez por tramos (sensores)
+def zgz_fluidez(t):
+    """El Ayuntamiento publicaba el estado de 620 tramos (g verde, y amarillo, r rojo, b negro/cortado, t sin datos).
+    Dejó de actualizarse en marzo de 2025. Se comprueba en cada ejecución y, si vuelve, se activa sola."""
+    d = json.loads(get(ZGZ_FLUIDEZ).decode("utf-8"))
+    ts = d.get("timestamp", "")
+    try:
+        when = dt.datetime.strptime(ts, "%Y%m%d-%H%M%SZ").replace(tzinfo=dt.timezone.utc)
+    except Exception:
+        when = None
+    estados = d.get("estados", "")
+    activo = bool(when and (t - when).total_seconds() < 1800 and any(c in "gyrb" for c in estados))
+    return {"timestamp": when.isoformat() if when else ts, "activo": activo, "estados": estados if activo else None}
+
+
 # ---------------------------------------------------------------- Ayuntamiento
 def zgz_json(url):
     return json.loads(get(url).decode("utf-8"))
@@ -272,7 +333,7 @@ def zgz_tranvia():
 
 
 # ---------------------------------------------------------------- Histórico y patrones
-def guardar_foto(t, inc, cortes, tiempos, tranvia):
+def guardar_foto(t, inc, cortes, tiempos, tranvia, fluidez=None):
     foto = {
         "t": t.isoformat(timespec="minutes"),
         "dgt": [
@@ -289,6 +350,7 @@ def guardar_foto(t, inc, cortes, tiempos, tranvia):
         "cortes": [c["id"] for c in cortes],
         "tiempos": {x["panel"]: x["texto"] for x in tiempos if x["texto"]},
         "tranvia": {x["id"]: x["min"] for x in tranvia if x["min"] is not None},
+        "fluidez": fluidez["estados"] if fluidez and fluidez.get("activo") else None,
     }
     os.makedirs(HIST, exist_ok=True)
     path = os.path.join(HIST, t.strftime("%Y-%m-%d") + ".jsonl")
@@ -391,6 +453,28 @@ def main():
         except Exception as e:
             errores["dgt_camaras"] = str(e)
 
+    pan_path = os.path.join(DATA, "dgt_paneles_ubicacion.json")
+    ult = estado.get("paneles_ubicados")
+    if not os.path.exists(pan_path) or not ult or (t - dt.datetime.fromisoformat(ult)).total_seconds() > 86400:
+        try:
+            write_json(pan_path, dgt_paneles_ubicacion())
+            estado["paneles_ubicados"] = t.isoformat(timespec="seconds")
+        except Exception as e:
+            errores["dgt_paneles_ubicacion"] = str(e)
+    try:
+        pan = dgt_paneles(read_json(pan_path, {}))
+        write_json(os.path.join(DATA, "dgt_paneles.json"), {"fuente": "DGT – Punto de Acceso Nacional (paneles de mensaje variable)",
+                                                             "descargado": t.isoformat(timespec="seconds"), "paneles": pan})
+    except Exception as e:
+        errores["dgt_paneles"] = str(e)
+
+    fluidez = None
+    try:
+        fluidez = zgz_fluidez(t)
+        write_json(os.path.join(DATA, "zgz_fluidez.json"), fluidez)
+    except Exception as e:
+        errores["zgz_fluidez"] = str(e)
+
     cortes, tiempos, tranvia = [], [], []
     for nombre, fn in (("zgz_cortes", zgz_cortes), ("zgz_tiempos", zgz_tiempos), ("zgz_tranvia", zgz_tranvia)):
         try:
@@ -405,14 +489,14 @@ def main():
             errores[nombre] = str(e)
 
     if "dgt_incidencias" not in errores:
-        guardar_foto(t, inc, cortes, tiempos, tranvia)
+        guardar_foto(t, inc, cortes, tiempos, tranvia, fluidez)
     calcular_patrones()
 
     estado.update({"ultima_ejecucion": t.isoformat(timespec="seconds"), "errores": errores,
                    "incidencias_dgt": len(inc), "cortes_ayto": len(cortes)})
     write_json(os.path.join(DATA, "estado.json"), estado)
     print(json.dumps(estado, ensure_ascii=False, indent=1))
-    return 0 if len(errores) < 4 else 1
+    return 0 if len(errores) < 6 else 1
 
 
 if __name__ == "__main__":
