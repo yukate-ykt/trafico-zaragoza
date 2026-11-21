@@ -53,6 +53,7 @@
   }).addTo(map);
 
   var layers = {
+    eventos: { name: "Eventos de hoy (agenda municipal)", emoji: "🎟️", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
     fluidez: { name: "Fluidez de calles (sensores Ayto.)", emoji: "🚦", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
     paneles: { name: "Paneles luminosos DGT (mensajes)", emoji: "📟", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tiempos: { name: "Tráfico urbano: tiempos de recorrido", emoji: "⏱️", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
@@ -250,6 +251,40 @@
       });
       setCount("camzgz", (r[0].features || []).length);
     }).catch(function () { setCount("camzgz", "sin conexión"); });
+  }
+
+  // ---------------------------------------------------------------- eventos de hoy (Agenda de Zaragoza, Ayuntamiento)
+  // Solo eventos puntuales (de 3 días o menos): las exposiciones largas apenas mueven tráfico.
+  var GRAN_AFORO = /pr[ií]ncipe felipe|romareda|ibercaja estadio|estadio|auditorio|multiusos|feria de zaragoza|plaza de toros|palacio de congresos|pabell[oó]n|parque grande|expo|recinto ferial|anfiteatro|pilar/i;
+  function loadEventos() {
+    return fetchJSON(ZGZ + "/actividades/evento/hoy.json?rows=500&srsname=wgs84", true).then(function (d) {
+      var g = layers.eventos.group; g.clearLayers(); var lista = [];
+      (d.result || []).forEach(function (r) {
+        var ini = new Date(r.startDate), fin = new Date(r.endDate || r.startDate);
+        if (!isNaN(ini) && !isNaN(fin) && (fin - ini) > 3 * 86400000) return;
+        var c = r.geometry && r.geometry.coordinates; if (!c) return;
+        var lugar = typeof r.location === "object" ? (r.location && r.location.title) : r.location;
+        var horas = [];
+        (r.subEvent || []).forEach(function (se) { (se.openingHours || []).forEach(function (h) { if (h.startTime) horas.push(h.startTime + (h.endTime ? "–" + h.endTime : "")); }); });
+        var gran = GRAN_AFORO.test(lugar || "");
+        var tmp = document.createElement("div"); tmp.innerHTML = r.description || ""; var desc = tmp.textContent.trim().slice(0, 220);
+        var url = r.sameAs ? "https://www.zaragoza.es/sede/servicio/cultura/evento/" + String(r.sameAs).split("/").pop() : null;
+        L.marker([c[1], c[0]], { icon: emojiIcon(gran ? "🎤" : "🎟️", gran ? COLORS.red : COLORS.purple, { size: gran ? 34 : 24, label: gran ? "!" : null }), zIndexOffset: gran ? 600 : 0 })
+          .bindPopup("<h3>" + (gran ? "🎤 " : "🎟️ ") + esc(r.title) + "</h3><p><b>" + esc(lugar || "") + "</b>" + (horas.length ? "<br>Hoy: " + esc(horas.join(", ")) : "") + "</p>" +
+            (gran ? '<p><b>Recinto de gran aforo:</b> posible tráfico denso y problemas de aparcamiento antes y después.</p>' : "") +
+            (desc ? "<p>" + esc(desc) + (desc.length >= 220 ? "…" : "") + "</p>" : "") +
+            '<p class="muted">Fuente: Agenda de Zaragoza (Ayuntamiento)' + (url ? ' · <a href="' + esc(url) + '" target="_blank" rel="noopener">más información</a>' : "") + "</p>")
+          .bindTooltip(r.title + (horas.length ? " · " + horas[0] : "")).addTo(g);
+        lista.push({ t: horas[0] || "", gran: gran, html: "<b>" + (gran ? "🎤 " : "") + esc(r.title) + "</b><small>" + esc((horas[0] ? horas[0] + " · " : "") + (lugar || "")) + "</small>", pos: [c[1], c[0]] });
+      });
+      lista.sort(function (a, b) { return (b.gran - a.gran) || a.t.localeCompare(b.t); });
+      $("eventosList").innerHTML = lista.map(function (e, i) { return '<li data-i="' + i + '">' + e.html + "</li>"; }).join("") || "<li><small>No hay eventos puntuales hoy en la agenda.</small></li>";
+      Array.prototype.forEach.call($("eventosList").querySelectorAll("li[data-i]"), function (li) {
+        li.addEventListener("click", function () { var e = lista[+li.getAttribute("data-i")]; map.setView(e.pos, 16); g.eachLayer(function (m) { if (m.getLatLng && m.getLatLng().equals(e.pos)) m.openPopup(); }); });
+      });
+      $("eventosMeta").textContent = lista.length + " eventos puntuales hoy · " + lista.filter(function (e) { return e.gran; }).length + " en recintos de gran aforo";
+      setCount("eventos", lista.length);
+    }).catch(function () { setCount("eventos", "sin conexión"); $("eventosMeta").textContent = "No se ha podido consultar la agenda."; });
   }
 
   // ---------------------------------------------------------------- capa 4: cortes del Ayuntamiento
@@ -577,11 +612,12 @@
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
 
   renderLayerList();
-  loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz();
+  loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz(); loadEventos();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
   setInterval(function () { loadDGT(); loadEstado(); loadPaneles(); loadFluidez(); }, 2 * 60 * 1000);
   setInterval(loadCortes, 5 * 60 * 1000);
+  setInterval(loadEventos, 30 * 60 * 1000);
   setInterval(loadPatrones, 15 * 60 * 1000);
 })();
