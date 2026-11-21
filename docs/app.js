@@ -50,12 +50,12 @@
   }).addTo(map);
 
   var layers = {
-    tiempos: { name: "Tráfico urbano: tiempos de recorrido", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
-    dgt: { name: "Incidencias DGT (Z-40, A-2, A-23…)", color: COLORS.red, group: L.layerGroup(), on: true, count: "–" },
-    camaras: { name: "Cámaras DGT (imagen en directo)", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
-    cortes: { name: "Cortes y obras en la ciudad", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
-    tranvia: { name: "Tranvía: próximas llegadas", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
-    bus: { name: "Autobús: paradas (zoom para ver)", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" }
+    tiempos: { name: "Tráfico urbano: tiempos de recorrido", emoji: "⏱️", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
+    dgt: { name: "Incidencias DGT (Z-40, A-2, A-23…)", emoji: "⚠️", color: COLORS.red, group: L.layerGroup(), on: true, count: "–" },
+    camaras: { name: "Cámaras DGT (imagen en directo)", emoji: "📷", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
+    cortes: { name: "Cortes y obras en la ciudad", emoji: "🚧", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
+    tranvia: { name: "Tranvía en directo", emoji: "🚋", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
+    bus: { name: "Autobús: paradas (acerca el mapa)", emoji: "🚌", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" }
   };
   var heat = null;
 
@@ -64,7 +64,7 @@
     Object.keys(layers).forEach(function (k) {
       var l = layers[k];
       html += '<label class="layer"><input type="checkbox" data-layer="' + k + '"' + (l.on ? " checked" : "") + '>' +
-        '<span class="dot" style="background:' + l.color + '"></span><span class="name">' + esc(l.name) + '</span>' +
+        '<span class="lemo">' + l.emoji + '</span><span class="name">' + esc(l.name) + '</span>' +
         '<span class="count">' + esc(l.count) + "</span></label>";
     });
     $("layerList").innerHTML = html;
@@ -80,6 +80,14 @@
   }
   Object.keys(layers).forEach(function (k) { if (k !== "bus") layers[k].group.addTo(map); });
 
+  // Icono con emoji dentro de una "burbuja" blanca con borde de color
+  function emojiIcon(emoji, border, opts) {
+    opts = opts || {};
+    var h = opts.size || 30, w = opts.wide ? Math.round(h * 1.6) : h;
+    var label = opts.label ? '<span class="emo-lbl" style="background:' + border + '">' + esc(opts.label) + "</span>" : "";
+    return L.divIcon({ className: "", html: '<div class="emo' + (opts.cls ? " " + opts.cls : "") + '" style="width:' + w + "px;height:" + h + "px;font-size:" + Math.round(h * .55) + "px;border-color:" + border + '">' + emoji + label + "</div>",
+      iconSize: [w, h], iconAnchor: [w / 2, h / 2], popupAnchor: [0, -h / 2], tooltipAnchor: [w / 2, 0] });
+  }
   function divIcon(cls, html, size, bg) {
     return L.divIcon({ className: "", html: '<div class="' + cls + '" style="width:' + size + "px;height:" + size + "px;" + (bg ? "background:" + bg : "") + '">' + html + "</div>", iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2] });
   }
@@ -111,8 +119,15 @@
     if (i.causa === "vehicleObstruction" || i.causa === "obstruction") return "#d6409f";
     return COLORS.purple;
   }
+  function emojiDGT(i) {
+    if (i.causa === "accident") return "🚗💥";
+    if (i.causa === "abnormalTraffic" || /retenci|denso|lento|detenido/i.test(i.detalle || "") && i.causa !== "vehicleObstruction") return "🚗🚙";
+    if (i.causa === "roadMaintenance") return /cortad/i.test(i.afeccion || "") ? "🚧" : "🚜";
+    if (/cortad/i.test(i.afeccion || "") && i.causa !== "vehicleObstruction") return "🚧";
+    return "⚠️";
+  }
   function popupDGT(i) {
-    return "<h3>" + esc(i.carretera || "Carretera") + " · " + esc(i.tipo) + "</h3><table>" +
+    return "<h3>" + emojiDGT(i) + " " + esc(i.carretera || "Carretera") + " · " + esc(i.tipo) + "</h3><table>" +
       (i.detalle ? "<tr><td>Detalle</td><td>" + esc(i.detalle) + "</td></tr>" : "") +
       (i.afeccion ? "<tr><td>Afección</td><td>" + esc(i.afeccion) + "</td></tr>" : "") +
       "<tr><td>Tramo</td><td>km " + esc(i.desde.km) + (i.hasta && i.hasta.km !== i.desde.km ? " → " + esc(i.hasta.km) : "") + "</td></tr>" +
@@ -134,9 +149,10 @@
         var a = [i.desde.lat, i.desde.lon], b = [i.hasta.lat, i.hasta.lon];
         var popup = popupDGT(i);
         if (a[0] !== b[0] || a[1] !== b[1]) L.polyline([a, b], { color: col, weight: 6, opacity: .8 }).bindPopup(popup).addTo(g);
-        var m = L.marker(a, { icon: divIcon("inc-icon", i.causa === "accident" ? "!" : i.causa === "roadMaintenance" ? "⚒" : "▲", 24, col) }).bindPopup(popup).addTo(g);
+        var em = emojiDGT(i);
+        var m = L.marker(a, { icon: emojiIcon(em, col, { wide: em.length > 2 && em !== "⚠️", size: 32 }), zIndexOffset: 500 }).bindPopup(popup).addTo(g);
         dgtMarkers[i.id] = m;
-        html += '<li data-id="' + esc(i.id) + '"><span class="tag" style="background:' + col + '">' + esc(i.tipo) + "</span><b>" + esc(i.carretera) + " km " + esc(i.desde.km) + (i.desde.municipio ? " · " + esc(i.desde.municipio) : "") + "</b><small>" + esc([i.detalle, i.afeccion].filter(Boolean).join(" · ")) + "</small></li>";
+        html += '<li data-id="' + esc(i.id) + '"><span class="tag" style="background:' + col + '">' + emojiDGT(i) + " " + esc(i.tipo) + "</span><b>" + esc(i.carretera) + " km " + esc(i.desde.km) + (i.desde.municipio ? " · " + esc(i.desde.municipio) : "") + "</b><small>" + esc([i.detalle, i.afeccion].filter(Boolean).join(" · ")) + "</small></li>";
       });
       $("dgtList").innerHTML = html || "<li><small>No hay incidencias activas ahora mismo en la zona.</small></li>";
       $("dgtMeta").textContent = inc.length + " activas · datos de la DGT descargados " + hace(d.descargado) + " (" + fmtFecha(d.descargado) + ")";
@@ -175,6 +191,11 @@
     if (/transporte/i.test(tipo || "")) return COLORS.blue;
     return COLORS.orange;
   }
+  function emojiCorte(tipo, r) {
+    if (/corte/i.test(tipo || "")) return "🚧";
+    if (/obra|reforma|urbaniza|asfalt|pavimen|renovaci|instalaci|canaliza|red de|zanja|construcci/i.test((r.title || "") + " " + (r.motivo || ""))) return "🚜";
+    return "🚗🚙";
+  }
   var corteMarkers = {};
   function loadCortes() {
     return fetchJSON(URLS.cortes, true).then(function (d) {
@@ -182,8 +203,8 @@
       var res = d.result || []; var html = "";
       res.forEach(function (r) {
         var m = /Tipo:\s*([^<]+)/.exec(r.description || ""); var tipo = m ? m[1].trim() : "Afección";
-        var col = colorCorte(tipo);
-        var popup = "<h3>" + esc(r.title) + '</h3><p><span class="tag" style="background:' + col + '">' + esc(tipo) + "</span></p><table>" +
+        var col = colorCorte(tipo), em = emojiCorte(tipo, r);
+        var popup = "<h3>" + em + " " + esc(r.title) + '</h3><p><span class="tag" style="background:' + col + '">' + esc(tipo) + "</span></p><table>" +
           (r.calle ? "<tr><td>Dirección</td><td>" + esc(r.calle) + "</td></tr>" : "") +
           (r.inicio ? "<tr><td>Inicio</td><td>" + esc(fmtFecha(r.inicio).slice(0, 10)) + "</td></tr>" : "") +
           (r.fin ? "<tr><td>Fin</td><td>" + esc(fmtFecha(r.fin).slice(0, 10)) + "</td></tr>" : "") +
@@ -194,8 +215,8 @@
           lines.forEach(function (ln) { L.polyline(ln.map(function (p) { return [p[1], p[0]]; }), { color: col, weight: 7, opacity: .85 }).bindPopup(popup).addTo(g); });
         }
         var c = r.geometry && r.geometry.coordinates;
-        if (c) { corteMarkers[r.id] = L.circleMarker([c[1], c[0]], { radius: 6, color: "#fff", weight: 2, fillColor: col, fillOpacity: 1 }).bindPopup(popup).addTo(g); }
-        html += '<li data-id="' + esc(r.id) + '"><span class="tag" style="background:' + col + '">' + esc(tipo) + "</span><b>" + esc(r.title) + "</b><small>" + esc((r.tramo || r.calle || "").slice(0, 140)) + "</small></li>";
+        if (c) { corteMarkers[r.id] = L.marker([c[1], c[0]], { icon: emojiIcon(em, col, { wide: em.length > 2, size: 28 }), zIndexOffset: 300 }).bindPopup(popup).addTo(g); }
+        html += '<li data-id="' + esc(r.id) + '"><span class="tag" style="background:' + col + '">' + em + " " + esc(tipo) + "</span><b>" + esc(r.title) + "</b><small>" + esc((r.tramo || r.calle || "").slice(0, 140)) + "</small></li>";
       });
       $("cortesList").innerHTML = html || "<li><small>No hay cortes publicados ahora mismo.</small></li>";
       $("cortesMeta").textContent = res.length + " activas · en directo del Ayuntamiento · consultado " + new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" });
@@ -206,28 +227,66 @@
     }).catch(function () { $("cortesMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; });
   }
 
-  // ---------------------------------------------------------------- capa 5a: tranvía
+  // ---------------------------------------------------------------- capa 5a: tranvía (paradas + posición estimada)
   function colorEspera(min) { if (min == null) return COLORS.gray; if (min <= 5) return COLORS.green; if (min <= 10) return COLORS.orange; return COLORS.red; }
-  var tranviaMarkers = {};
+  var tranviaMarkers = {}, tramVeh = L.layerGroup().addTo(layers.tranvia.group);
+  function lerp(a, b, f) { return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; }
+  function distM(a, b) { var dy = (a[0] - b[0]) * 111320, dx = (a[1] - b[1]) * 111320 * Math.cos(a[0] * Math.PI / 180); return Math.sqrt(dx * dx + dy * dy); }
+  /* Calcula dónde está cada vehículo a partir de los tiempos de llegada a las paradas, en orden de recorrido.
+     Si el siguiente vehículo llega antes a la parada i que a la parada i-1, es que ya ha pasado la i-1:
+     está entre ambas. Cuanto menos le falte, más cerca de la parada i. */
+  function estimarVehiculos(seq, minPorMetro) {
+    var out = [];
+    for (var i = 0; i < seq.length; i++) {
+      var s = seq[i]; if (s.eta == null) continue;
+      if (s.eta === 0) { out.push({ pos: s.pos, junto: s, eta: 0, info: s.info }); continue; }
+      var p = seq[i - 1];
+      if (!p || p.eta == null || p.corte) continue;
+      if (s.eta < p.eta) {
+        var tSeg = Math.max(1, distM(p.pos, s.pos) * minPorMetro);
+        var f = Math.min(0.95, Math.max(0.05, 1 - s.eta / tSeg));
+        out.push({ pos: lerp(p.pos, s.pos, f), junto: s, eta: s.eta, info: s.info });
+      }
+    }
+    return out;
+  }
   function loadTranvia() {
     return fetchJSON(URLS.tranvia, true).then(function (d) {
       var res = d.result || []; var activas = 0;
+      var dirs = { 1: [], 2: [] };
       res.forEach(function (r) {
         var c = r.geometry && r.geometry.coordinates; if (!c) return;
         var dest = r.destinos || [];
         var mins = dest.map(function (x) { return x.minutos; }).filter(function (x) { return typeof x === "number"; });
         var min = mins.length ? Math.min.apply(null, mins) : null; if (min != null) activas++;
-        var popup = "<h3>🚋 " + esc(r.title) + "</h3>" + (dest.length ? "<table>" + dest.map(function (x) {
+        var primero = dest.filter(function (x) { return x.minutos === min; })[0];
+        var n = parseInt(r.id, 10); if (!isNaN(n) && dirs[n % 10]) dirs[n % 10].push({ id: n, title: r.title, pos: [c[1], c[0]], eta: min, info: primero });
+        var popup = "<h3>🚊 Parada " + esc(r.title) + "</h3>" + (dest.length ? "<table>" + dest.map(function (x) {
           return "<tr><td>" + esc(x.linea) + "</td><td>" + esc(x.destino) + "</td><td><b>" + esc(x.minutos) + " min</b></td></tr>";
         }).join("") + "</table>" : '<p class="muted">Sin llegadas previstas ahora.</p>') +
           '<p class="muted">Tiempo real · actualizado ' + esc((r.lastUpdated || "").slice(11, 16)) + "</p>";
         var m = tranviaMarkers[r.id];
-        var style = { radius: 7, color: "#fff", weight: 2, fillColor: colorEspera(min), fillOpacity: 1 };
-        if (m) { m.setStyle(style); m.setPopupContent(popup); }
-        else { tranviaMarkers[r.id] = L.circleMarker([c[1], c[0]], style).bindPopup(popup).bindTooltip(r.title + (min != null ? " · " + min + " min" : "")).addTo(layers.tranvia.group); }
-        tranviaMarkers[r.id].setTooltipContent(r.title + (min != null ? " · próximo en " + min + " min" : ""));
+        var tip = r.title + (min != null ? " · próximo en " + min + " min" : "");
+        if (m) { m.setIcon(emojiIcon("🚊", colorEspera(min), { size: 24 })); m.setPopupContent(popup); m.setTooltipContent(tip); }
+        else { tranviaMarkers[r.id] = L.marker([c[1], c[0]], { icon: emojiIcon("🚊", colorEspera(min), { size: 24 }) }).bindPopup(popup).bindTooltip(tip).addTo(layers.tranvia.group); }
       });
-      setCount("tranvia", activas + "/" + res.length + " paradas");
+      // Sentido 1 (id acabado en 1): hacia Mago de Oz, ids crecientes. Sentido 2: hacia Av. Academia, ids decrecientes.
+      dirs[1].sort(function (a, b) { return a.id - b.id; });
+      dirs[2].sort(function (a, b) { return b.id - a.id; });
+      tramVeh.clearLayers(); var total = 0;
+      [1, 2].forEach(function (k) {
+        estimarVehiculos(dirs[k], 1 / 300).forEach(function (v) {
+          total++;
+          var destino = v.info ? v.info.destino : (k === 1 ? "MAGO DE OZ" : "AVENIDA ACADEMIA");
+          var doble = /doble/i.test(destino || "");
+          L.marker(v.pos, { icon: emojiIcon("🚋", COLORS.green, { size: 34, cls: "veh", label: k === 1 ? "↓" : "↑" }), zIndexOffset: 1000 })
+            .bindPopup("<h3>🚋 Tranvía L1" + (doble ? " (doble)" : "") + "</h3><p>Hacia <b>" + esc(String(destino).replace(/ - Tranvia doble/i, "")) + "</b><br>" +
+              (v.eta === 0 ? "En la parada <b>" + esc(v.junto.title) + "</b>" : "Llega a <b>" + esc(v.junto.title) + "</b> en " + v.eta + " min") +
+              '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS).</p>')
+            .bindTooltip("Tranvía hacia " + String(destino).replace(/ - Tranvia doble/i, "")).addTo(tramVeh);
+        });
+      });
+      setCount("tranvia", total + " en marcha · " + activas + " paradas");
     }).catch(function () { setCount("tranvia", "sin conexión"); });
   }
 
@@ -238,8 +297,8 @@
       var g = layers.bus.group; var res = d.result || [];
       res.forEach(function (r) {
         var c = r.geometry && r.geometry.coordinates; if (!c) return;
-        L.circleMarker([c[1], c[0]], { radius: 5, color: "#fff", weight: 1.5, fillColor: COLORS.blue, fillOpacity: .9 })
-          .bindPopup("<h3>🚌 " + esc(r.title) + '</h3><p class="muted">Consultando llegadas…</p>')
+        L.marker([c[1], c[0]], { icon: emojiIcon("🚌", COLORS.blue, { size: 22, cls: "stop" }) })
+          .bindPopup("<h3>🚏 " + esc(r.title) + '</h3><p class="muted">Consultando llegadas…</p>')
           .on("popupopen", function (e) { busPopup(e.popup, r); })
           .addTo(g);
       });
@@ -260,6 +319,81 @@
     if (!show && map.hasLayer(layers.bus.group)) map.removeLayer(layers.bus.group);
   }
   map.on("zoomend", updateBusVisibility);
+
+  // ---------------------------------------------------------------- capa 5c: autobuses en circulación de una línea (posición estimada)
+  var busVeh = L.layerGroup().addTo(map), busLinea = null, busTimer = null, busCache = {};
+  function parseEta(t) {
+    if (!t) return null;
+    if (/en la parada/i.test(t)) return 0;
+    var m = /(\d+)\s*min/i.exec(t); return m ? parseInt(m[1], 10) : null;
+  }
+  function normDest(d) { return String(d || "").replace(/[.,]+\s*$/, "").trim().toUpperCase(); }
+  function pool(items, n, fn) {
+    var i = 0, out = new Array(items.length);
+    function next() { if (i >= items.length) return Promise.resolve(); var k = i++; return fn(items[k]).then(function (v) { out[k] = v; }, function () { out[k] = null; }).then(next); }
+    var w = []; for (var j = 0; j < n; j++) w.push(next());
+    return Promise.all(w).then(function () { return out; });
+  }
+  function loadLineas() {
+    return fetchJSON(ZGZ + "/urbanismo-infraestructuras/transporte-urbano/linea-autobus.json").then(function (d) {
+      var ids = (d.result || []).map(function (u) { return String(u).split("/").pop(); });
+      ids.sort(function (a, b) { var na = parseInt(a, 10), nb = parseInt(b, 10); if (!isNaN(na) && !isNaN(nb)) return na - nb; if (!isNaN(na)) return -1; if (!isNaN(nb)) return 1; return a.localeCompare(b); });
+      $("busLinea").innerHTML = '<option value="">— elige una línea —</option>' + ids.map(function (x) { return '<option value="' + esc(x) + '">Línea ' + esc(x) + "</option>"; }).join("");
+    }).catch(function () { $("busEstado").textContent = "No se ha podido cargar la lista de líneas."; });
+  }
+  function paradasLinea(id) {
+    if (busCache[id]) return Promise.resolve(busCache[id]);
+    return fetchJSON(ZGZ + "/urbanismo-infraestructuras/transporte-urbano/linea-autobus/" + encodeURIComponent(id) + ".json?srsname=wgs84").then(function (d) {
+      var paradas = [], trazado = [];
+      (d.result || []).forEach(function (r) {
+        var g = r.geometry || {};
+        if (g.type === "Point" && r.about) paradas.push({ id: String(r.about).split("/").pop(), title: (r.title || "").replace(/^Parada\s+/, ""), pos: [g.coordinates[1], g.coordinates[0]] });
+        else if (g.type === "MultiLineString") g.coordinates.forEach(function (ln) { trazado.push(ln.map(function (p) { return [p[1], p[0]]; })); });
+        else if (g.type === "LineString") trazado.push(g.coordinates.map(function (p) { return [p[1], p[0]]; }));
+      });
+      busCache[id] = { paradas: paradas, trazado: trazado };
+      return busCache[id];
+    });
+  }
+  function cargarBuses() {
+    var id = busLinea; if (!id) return;
+    $("busEstado").textContent = "Consultando las paradas de la línea " + id + "…";
+    paradasLinea(id).then(function (L1) {
+      return pool(L1.paradas, 6, function (p) { return fetchJSON(URLS.poste(p.id), true); }).then(function (res) {
+        if (busLinea !== id) return;
+        var porDestino = {}, ok = 0;
+        L1.paradas.forEach(function (p, k) {
+          var r = res[k]; if (!r) return; ok++;
+          (r.destinos || []).forEach(function (x) {
+            if (String(x.linea) !== String(id)) return;
+            var dn = normDest(x.destino); (porDestino[dn] = porDestino[dn] || []).push({ title: p.title, pos: p.pos, eta: parseEta(x.primero), info: x });
+          });
+        });
+        busVeh.clearLayers();
+        L1.trazado.forEach(function (ln) { L.polyline(ln, { color: COLORS.blue, weight: 4, opacity: .35, interactive: false }).addTo(busVeh); });
+        var total = 0;
+        Object.keys(porDestino).forEach(function (dn) {
+          var seq = porDestino[dn];
+          for (var i = 1; i < seq.length; i++) if (distM(seq[i - 1].pos, seq[i].pos) > 1500) seq[i - 1].corte = true;
+          estimarVehiculos(seq, 1 / 230).forEach(function (v) {
+            total++;
+            L.marker(v.pos, { icon: emojiIcon("🚌", COLORS.blue, { size: 34, cls: "veh", label: id }), zIndexOffset: 1000 })
+              .bindPopup("<h3>🚌 Línea " + esc(id) + "</h3><p>Hacia <b>" + esc(dn) + "</b><br>" +
+                (v.eta === 0 ? "En la parada <b>" + esc(v.junto.title) + "</b>" : "Llega a <b>" + esc(v.junto.title) + "</b> en " + v.eta + " min") +
+                '</p><p class="muted">Posición estimada a partir de los tiempos de llegada en las paradas (no es GPS).</p>')
+              .bindTooltip("Línea " + id + " hacia " + dn).addTo(busVeh);
+          });
+        });
+        $("busEstado").textContent = "Línea " + id + ": " + total + " autobuses en circulación (estimado) · " + ok + " paradas consultadas · " + new Date().toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Madrid" }) + ". Se actualiza cada minuto.";
+      });
+    }).catch(function () { $("busEstado").textContent = "No se ha podido consultar la línea " + id + " ahora."; });
+  }
+  $("busLinea").addEventListener("change", function () {
+    busLinea = this.value || null; clearInterval(busTimer); busVeh.clearLayers();
+    if (!busLinea) { $("busEstado").textContent = ""; return; }
+    cargarBuses(); busTimer = setInterval(cargarBuses, 60 * 1000);
+    paradasLinea(busLinea).then(function (L1) { var pts = L1.paradas.map(function (p) { return p.pos; }); if (pts.length) map.fitBounds(pts, { padding: [30, 30] }); });
+  });
 
   // ---------------------------------------------------------------- patrones (histórico)
   var puntoMarkers = [];
@@ -325,6 +459,7 @@
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
 
   renderLayerList();
+  loadLineas();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 60 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
