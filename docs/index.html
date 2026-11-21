@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tráfico Zaragoza en directo</title>
+<meta name="description" content="Mapa del tráfico de Zaragoza en tiempo real con datos abiertos del Ayuntamiento y de la DGT, e histórico de patrones.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='9' y='2' width='14' height='28' rx='4' fill='%23222'/><circle cx='16' cy='9' r='3.5' fill='%23e5484d'/><circle cx='16' cy='16' r='3.5' fill='%23f5a524'/><circle cx='16' cy='23' r='3.5' fill='%2330a46c'/></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="panel" aria-label="Panel de información">
+    <header class="brand">
+      <div>
+        <h1>Tráfico Zaragoza</h1>
+        <p class="sub">Datos abiertos en directo · Ayuntamiento y DGT</p>
+      </div>
+      <button id="togglePanel" class="icon-btn" aria-label="Ocultar panel" title="Ocultar panel">⟨</button>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-tab="directo" aria-selected="true">En directo</button>
+      <button role="tab" class="tab" data-tab="patrones" aria-selected="false">Patrones</button>
+      <button role="tab" class="tab" data-tab="info" aria-selected="false">Fuentes</button>
+    </nav>
+
+    <section id="tab-directo" class="tabpane active">
+      <div class="layers" id="layerList"></div>
+      <h2>Incidencias DGT en accesos y rondas</h2>
+      <p class="meta" id="dgtMeta">Cargando…</p>
+      <ul class="list" id="dgtList"></ul>
+      <h2>Cortes y afecciones en la ciudad</h2>
+      <p class="meta" id="cortesMeta">Cargando…</p>
+      <ul class="list" id="cortesList"></ul>
+    </section>
+
+    <section id="tab-patrones" class="tabpane">
+      <p class="meta" id="patMeta">Cargando…</p>
+      <h2>Incidencias activas por día y hora</h2>
+      <p class="hint">Media de incidencias DGT activas en el área de Zaragoza en cada franja. Cuanto más oscuro, más incidencias.</p>
+      <div id="grid" class="grid-wrap"></div>
+      <h2>Puntos recurrentes</h2>
+      <p class="hint">Lugares (zonas de unos 500 m) donde más incidencias distintas se han registrado. Pulsa para verlo en el mapa.</p>
+      <ol class="list ranked" id="puntosList"></ol>
+      <label class="check"><input type="checkbox" id="heatToggle"> Mostrar mapa de calor del histórico</label>
+    </section>
+
+    <section id="tab-info" class="tabpane">
+      <h2>De dónde salen los datos</h2>
+      <ul class="sources">
+        <li><b>Incidencias en carreteras y cámaras</b>: DGT, Punto de Acceso Nacional (DATEX II). Las recoge un recolector automático cada 10 minutos.</li>
+        <li><b>Cortes de tráfico y afecciones</b>: Ayuntamiento de Zaragoza, «Incidencias en la vía pública». En directo.</li>
+        <li><b>Tiempos de recorrido</b>: paneles informativos del Ayuntamiento. En directo, cuando los paneles publican datos.</li>
+        <li><b>Tranvía</b>: tiempos de llegada en cada parada. En directo, cada minuto.</li>
+        <li><b>Autobús</b>: tiempos de llegada en cada poste. Se consultan al pulsar sobre la parada.</li>
+      </ul>
+      <h2>Qué no hay en abierto</h2>
+      <p>El Ayuntamiento no publica hoy en abierto el estado de fluidez calle a calle ni las imágenes de sus cámaras urbanas, y la posición GPS de los autobuses tampoco es pública. Waze y Google Maps no son fuentes abiertas. Si alguna de estas fuentes se abre, se puede añadir como capa nueva.</p>
+      <p class="meta" id="estadoMeta"></p>
+    </section>
+  </aside>
+
+  <main id="map" aria-label="Mapa"></main>
+  <button id="showPanel" class="fab" aria-label="Mostrar panel" hidden>☰ Panel</button>
+  <div id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<dialog id="camDialog">
+  <form method="dialog" class="cam-head">
+    <div><b id="camTitle"></b><div class="meta" id="camSub"></div></div>
+    <button class="icon-btn" aria-label="Cerrar">✕</button>
+  </form>
+  <img id="camImg" alt="Imagen de la cámara de tráfico">
+  <p class="meta">La imagen se refresca cada 60 s · Fuente: DGT</p>
+</dialog>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
