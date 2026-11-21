@@ -1,1 +1,1 @@
-{"camaras_descargadas":"2026-11-21T11:25:42+01:00","ultima_ejecucion":"2026-11-21T15:29:43+01:00","errores":{},"incidencias_dgt":4,"cortes_ayto":64,"paneles_ubicados":"2026-11-21T13:26:37+01:00"}
+{"camaras_descargadas":"2026-11-21T11:25:42+01:00","ultima_ejecucion":"2026-11-21T15:39:42+01:00","errores":{"zgz_tranvia":"Expecting value: line 1 column 1 (char 0)"},"incidencias_dgt":5,"cortes_ayto":64,"paneles_ubicados":"2026-11-21T13:26:37+01:00"}
