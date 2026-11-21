@@ -15,10 +15,7 @@
     tramos: "data/zgz_tramos.json",
     dgtCam: "data/dgt_camaras.json",
     patrones: "data/patrones.json",
-    estado: "data/estado.json",
-    bizi: ZGZ + "/urbanismo-infraestructuras/estacion-bicicleta.json?rows=500&srsname=wgs84&fl=id,title,estado,bicisDisponibles,anclajesDisponibles,geometry,lastUpdated",
-    zonaAN: "data/zgz_zona_azul_naranja.json",
-    zonaOcup: ZGZ + "/urbanismo-infraestructuras/equipamiento/estacionamiento-regulado/ocupacion.json?rows=50&srsname=wgs84"
+    estado: "data/estado.json"
   };
   var COLORS = { red: "#e5484d", orange: "#f5a524", green: "#30a46c", purple: "#8e4ec6", blue: "#0b6bcb", gray: "#8b8d98", dark: "#1c2024" };
   var DIAS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
@@ -65,9 +62,7 @@
     camaras: { name: "Cámaras DGT (imagen en directo)", emoji: "📷", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
     cortes: { name: "Cortes y obras en la ciudad", emoji: "🚧", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tranvia: { name: "Tranvía en directo", emoji: "🚋", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
-    bus: { name: "Autobús: paradas (acerca el mapa)", emoji: "🚌", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" },
-    bizi: { name: "Bizi (acerca el mapa)", emoji: "🚲", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
-    zona: { name: "Zona azul y naranja", emoji: "🅿️", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" }
+    bus: { name: "Autobús: paradas (acerca el mapa)", emoji: "🚌", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" }
   };
   var heat = null;
 
@@ -88,18 +83,9 @@
   function setLayer(k, on) {
     var l = layers[k]; l.on = on;
     if (k === "bus") { updateBusVisibility(); return; }
-    if (k === "bizi") { updateBiziVisibility(); return; }
     if (on) l.group.addTo(map); else map.removeLayer(l.group);
   }
-  Object.keys(layers).forEach(function (k) { if (k !== "bus" && k !== "bizi") layers[k].group.addTo(map); });
-  // Las 276 estaciones Bizi solo se dibujan con el mapa acercado, para no tapar el resto
-  var BIZI_ZOOM = 14;
-  function updateBiziVisibility() {
-    var ver = layers.bizi.on && map.getZoom() >= BIZI_ZOOM;
-    if (ver && !map.hasLayer(layers.bizi.group)) layers.bizi.group.addTo(map);
-    if (!ver && map.hasLayer(layers.bizi.group)) map.removeLayer(layers.bizi.group);
-  }
-  map.on("zoomend", updateBiziVisibility);
+  Object.keys(layers).forEach(function (k) { if (k !== "bus") layers[k].group.addTo(map); });
 
   // Icono con emoji dentro de una "burbuja" blanca con borde de color
   function emojiIcon(emoji, border, opts) {
@@ -265,78 +251,6 @@
       });
       setCount("camzgz", (r[0].features || []).length);
     }).catch(function () { setCount("camzgz", "sin conexión"); });
-  }
-
-  // ---------------------------------------------------------------- Bizi: bicis y anclajes libres en cada estación
-  // Primero se pide el servicio en directo del Ayuntamiento; si no responde, se pintan las
-  // estaciones con su capacidad (inventario municipal) y se avisa de que falta la disponibilidad.
-  var biziMarkers = {};
-  function colorBizi(b) { return b == null ? COLORS.gray : b === 0 ? COLORS.red : b <= 3 ? COLORS.orange : COLORS.green; }
-  function pintarBizi(lista, directo) {
-    var g = layers.bizi.group, vistos = {};
-    lista.forEach(function (e) {
-      vistos[e.id] = true;
-      var icon = emojiIcon("🚲", colorBizi(e.bicis), { size: 22, cls: "stop", label: e.bicis == null ? null : String(e.bicis) });
-      var popup = "<h3>🚲 Bizi · " + esc(e.nombre) + "</h3>" +
-        (directo ? "<table><tr><td>Bicis disponibles</td><td><b>" + esc(e.bicis) + "</b></td></tr><tr><td>Anclajes libres</td><td><b>" + esc(e.huecos) + "</b></td></tr>" +
-          (e.estado && e.estado !== "IN_SERVICE" ? "<tr><td>Estado</td><td>Fuera de servicio</td></tr>" : "") + "</table>" +
-          '<p class="muted">' + (e.fecha ? "Actualizado " + esc(hace(e.fecha)) + " · " : "") + "Fuente: Ayuntamiento de Zaragoza, servicio Bizi.</p>"
-        : "<p>" + esc(e.anclajes) + " anclajes" + (e.calle ? " · " + esc(e.calle) : "") + "</p>" +
-          '<p class="muted">El Ayuntamiento no está publicando ahora la disponibilidad de bicis; se reintenta cada 2 min. Fuente: inventario de estaciones Bizi.</p>');
-      var tip = directo ? e.nombre + " · " + e.bicis + " bicis, " + e.huecos + " huecos" : e.nombre;
-      var m = biziMarkers[e.id];
-      if (m) { m.setIcon(icon); m.setPopupContent(popup); m.setTooltipContent(tip); }
-      else biziMarkers[e.id] = L.marker(e.ll, { icon: icon }).bindPopup(popup).bindTooltip(tip).addTo(g);
-    });
-    Object.keys(biziMarkers).forEach(function (id) { if (!vistos[id]) { g.removeLayer(biziMarkers[id]); delete biziMarkers[id]; } });
-    if (directo) {
-      var bicis = lista.reduce(function (a, e) { return a + (e.bicis || 0); }, 0);
-      setCount("bizi", lista.length + " · " + bicis + " bicis");
-    } else setCount("bizi", lista.length + " · sin datos en directo");
-  }
-  function loadBizi() {
-    return fetchJSON(URLS.bizi, true).then(function (d) {
-      var lista = (d.result || []).filter(function (r) { return r.geometry && r.geometry.coordinates; }).map(function (r) {
-        var c = r.geometry.coordinates;
-        return { id: r.id, nombre: String(r.title || "").replace(/^\d+-\s*/, ""), ll: [c[1], c[0]], bicis: r.bicisDisponibles, huecos: r.anclajesDisponibles, estado: r.estado, fecha: r.lastUpdated };
-      });
-      if (!lista.length) throw new Error("vacío");
-      pintarBizi(lista, true);
-    }).catch(function () {
-      if (Object.keys(biziMarkers).length && layers.bizi.count.indexOf("bicis") > 0) return; // mantiene el último dato bueno
-      return fetchJSON(WFS + "MU1_estaciones_BIZI").then(function (d) {
-        pintarBizi((d.features || []).map(function (f) {
-          var p = f.properties, c = f.geometry.coordinates;
-          return { id: "w" + p.numero, nombre: p.numero + " · " + p.nombre, calle: p.situacion, anclajes: p.anclajes_bicicletas, ll: [c[1], c[0]], bicis: null };
-        }), false);
-      }).catch(function () { setCount("bizi", "sin conexión"); });
-    });
-  }
-
-  // ---------------------------------------------------------------- zona azul (ESRO, rotación) y naranja (ESRE, residentes)
-  var ZONA_COL = { azul: "#1f6feb", naranja: "#f76b15" };
-  function loadZona() {
-    return Promise.all([fetchJSON(URLS.zonaAN), fetchJSON(URLS.zonaOcup).catch(function () { return { result: [] }; })]).then(function (r) {
-      var g = layers.zona.group; g.clearLayers();
-      var ocup = {}, fechaOcup = "";
-      (r[1].result || []).forEach(function (z) {
-        ocup[z.numero_referencia] = z.ocupacion; fechaOcup = z.lastUpdated || fechaOcup;
-        if (z.geometry) L.geoJSON(z.geometry, { style: { color: COLORS.gray, weight: 1.5, dashArray: "4 4", fill: false }, interactive: false }).addTo(g);
-      });
-      var anyo = fechaOcup ? new Date(fechaOcup).getFullYear() : null;
-      var plazas = { azul: 0, naranja: 0 };
-      r[0].forEach(function (t) {
-        plazas[t.t] += t.p || 0;
-        var o = ocup[t.z];
-        var popup = "<h3>🅿️ Zona " + (t.t === "azul" ? "azul" : "naranja") + "</h3><p><b>" + esc(t.c) + (t.n ? " " + esc(t.n) : "") + "</b><br>" +
-          esc(t.p) + " plazas · " + (t.t === "azul" ? "rotación, para todos (ESRO)" : "preferente para residentes (ESRE)") + "</p>" +
-          (t.z ? "<p>Zona reguladora " + esc(t.z) + (o != null ? ": ocupación aproximada <b>" + esc(o) + "%</b>" + (anyo ? " (dato del Ayuntamiento de " + anyo + ")" : "") : "") + "</p>" : "") +
-          '<p class="muted">El Ayuntamiento no publica la ocupación en directo de cada calle. Fuente: «Estacionamientos en calle» y «Ocupación de estacionamiento regulado».</p>';
-        L.polyline(t.g.map(function (l) { return l.map(function (p) { return [p[1], p[0]]; }); }),
-          { color: ZONA_COL[t.t], weight: 4, opacity: .85 }).bindPopup(popup).bindTooltip(t.c + " · " + t.p + " plazas " + t.t).addTo(g);
-      });
-      setCount("zona", (plazas.azul + plazas.naranja) + " plazas");
-    }).catch(function () { setCount("zona", "sin conexión"); });
   }
 
   // ---------------------------------------------------------------- eventos de hoy (Agenda de Zaragoza, Ayuntamiento)
@@ -698,13 +612,12 @@
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
 
   renderLayerList();
-  loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz(); loadEventos(); loadBizi(); loadZona();
+  loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz(); loadEventos();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
   setInterval(function () { loadDGT(); loadEstado(); loadPaneles(); loadFluidez(); }, 2 * 60 * 1000);
   setInterval(loadCortes, 5 * 60 * 1000);
-  setInterval(loadBizi, 2 * 60 * 1000);
   setInterval(loadEventos, 30 * 60 * 1000);
   setInterval(loadPatrones, 15 * 60 * 1000);
 })();
