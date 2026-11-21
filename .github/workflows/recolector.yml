@@ -1,8 +1,10 @@
 name: Recolector de datos de tráfico
 
+# GitHub solo garantiza lanzar las tareas programadas aproximadamente cada hora en repositorios gratuitos.
+# Por eso cada ejecución recoge datos 6 veces, cada 10 minutos, durante unos 50 minutos.
 on:
   schedule:
-    - cron: "7,17,27,37,47,57 * * * *"   # cada 10 minutos, en minutos poco saturados (GitHub puede retrasarlo)
+    - cron: "7 * * * *"
   workflow_dispatch: {}      # botón para lanzarlo a mano
 
 permissions:
@@ -15,20 +17,23 @@ concurrency:
 jobs:
   recoger:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 62
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Descargar datos y actualizar histórico
-        run: python collector/collect.py
-      - name: Guardar cambios en el repositorio
+      - name: Recoger datos cada 10 minutos durante ~50 minutos
         run: |
           git config user.name "recolector-trafico"
           git config user.email "recolector-trafico@users.noreply.github.com"
-          git add docs/data
-          if git diff --cached --quiet; then echo "Sin cambios"; exit 0; fi
-          git commit -q -m "Datos $(date -u +%Y-%m-%dT%H:%MZ)"
-          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
-          exit 1
+          for i in 1 2 3 4 5 6; do
+            git pull -q --rebase || true
+            python collector/collect.py || echo "Fallo en la recogida $i"
+            git add docs/data
+            if ! git diff --cached --quiet; then
+              git commit -q -m "Datos $(date -u +%Y-%m-%dT%H:%MZ)"
+              for r in 1 2 3; do git pull -q --rebase && git push -q && break; sleep 5; done
+            fi
+            if [ $i -lt 6 ]; then sleep 590; fi
+          done
