@@ -57,6 +57,7 @@
     paneles: { name: "Paneles luminosos DGT (mensajes)", emoji: "📟", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tiempos: { name: "Tráfico urbano: tiempos de recorrido", emoji: "⏱️", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
     dgt: { name: "Incidencias DGT (Z-40, A-2, A-23…)", emoji: "⚠️", color: COLORS.red, group: L.layerGroup(), on: true, count: "–" },
+    camzgz: { name: "Cámaras Ayto. (orientación, sin imagen)", emoji: "🎥", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
     camaras: { name: "Cámaras DGT (imagen en directo)", emoji: "📷", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
     cortes: { name: "Cortes y obras en la ciudad", emoji: "🚧", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tranvia: { name: "Tranvía en directo", emoji: "🚋", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
@@ -224,6 +225,31 @@
       });
       setCount("camaras", (d.camaras || []).length);
     }).catch(function () { setCount("camaras", "–"); });
+  }
+
+  // ---------------------------------------------------------------- cámaras del Ayuntamiento: ubicación y zona que cubren
+  var WFS = ZGZ + "/wfs.geojson?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&srsName=EPSG:4326&cql_filter=&count=2000&typeName=";
+  function loadCamZgz() {
+    return Promise.all([fetchJSON(WFS + "MU1_CC_camaras_trafico"), fetchJSON(WFS + "MU1_CC_espectro_camaras")]).then(function (r) {
+      var g = layers.camzgz.group; g.clearLayers();
+      var zonas = {};
+      (r[1].features || []).forEach(function (f) {
+        var n = f.properties.numero;
+        zonas[n] = L.geoJSON(f.geometry, { style: { color: COLORS.purple, weight: 1, opacity: .5, fillColor: COLORS.purple, fillOpacity: .08 }, interactive: false }).addTo(g);
+      });
+      (r[0].features || []).forEach(function (f) {
+        var p = f.properties, c = f.geometry && f.geometry.coordinates; if (!c) return;
+        var z = zonas[p.numero];
+        L.marker([c[1], c[0]], { icon: emojiIcon("🎥", COLORS.purple, { size: 22 }) })
+          .bindPopup("<h3>🎥 Cámara municipal n.º " + esc(p.numero) + "</h3><p><b>" + esc(p.ubicacion) + "</b></p>" +
+            '<p class="muted">La zona sombreada es lo que cubre la cámara. Sus imágenes no son públicas (acceso: ' + esc(p.acceso || "Centro de Control de Tráfico") + ").<br>Fuente: Ayuntamiento de Zaragoza, «Espectro de cámaras de tráfico».</p>")
+          .bindTooltip("Cámara " + p.numero + " · " + p.ubicacion)
+          .on("popupopen", function () { if (z) z.setStyle({ weight: 2.5, opacity: 1, fillOpacity: .3 }); })
+          .on("popupclose", function () { if (z) z.setStyle({ weight: 1, opacity: .5, fillOpacity: .08 }); })
+          .addTo(g);
+      });
+      setCount("camzgz", (r[0].features || []).length);
+    }).catch(function () { setCount("camzgz", "sin conexión"); });
   }
 
   // ---------------------------------------------------------------- capa 4: cortes del Ayuntamiento
@@ -551,7 +577,7 @@
   $("showPanel").addEventListener("click", function () { $("panel").classList.remove("hidden"); $("showPanel").hidden = true; setTimeout(function () { map.invalidateSize(); }, 50); });
 
   renderLayerList();
-  loadLineas(); loadFluidez(); loadPaneles();
+  loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz();
   loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
