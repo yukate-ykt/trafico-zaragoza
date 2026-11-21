@@ -5,6 +5,7 @@
   var ZGZ = "https://www.zaragoza.es/sede/servicio";
   var URLS = {
     cortes: ZGZ + "/via-publica/incidencia.json?rows=500&srsname=wgs84",
+    conservacion: ZGZ + "/via-publica/incidencia/conservacion-hoy.json?rows=200&srsname=wgs84",
     tiempos: ZGZ + "/tiempos-recorrido.json?start=0&rows=-1&srsname=wgs84",
     tranvia: ZGZ + "/urbanismo-infraestructuras/transporte-urbano/parada-tranvia.json?rows=200&srsname=wgs84",
     postes: ZGZ + "/urbanismo-infraestructuras/transporte-urbano/poste-autobus.json?rows=-1&fl=id,title,geometry&srsname=wgs84",
@@ -60,6 +61,7 @@
     dgt: { name: "Incidencias DGT (Z-40, A-2, A-23…)", emoji: "⚠️", color: COLORS.red, group: L.layerGroup(), on: true, count: "–" },
     camzgz: { name: "Cámaras Ayto. (orientación, sin imagen)", emoji: "🎥", color: COLORS.purple, group: L.layerGroup(), on: true, count: "–" },
     camaras: { name: "Cámaras DGT (imagen en directo)", emoji: "📷", color: COLORS.dark, group: L.layerGroup(), on: true, count: "–" },
+    conservacion: { name: "Obras de conservación de hoy", emoji: "🛠️", color: "#a35829", group: L.layerGroup(), on: true, count: "–" },
     cortes: { name: "Cortes y obras en la ciudad", emoji: "🚧", color: COLORS.orange, group: L.layerGroup(), on: true, count: "–" },
     tranvia: { name: "Tranvía en directo", emoji: "🚋", color: COLORS.green, group: L.layerGroup(), on: true, count: "–" },
     bus: { name: "Autobús: paradas (acerca el mapa)", emoji: "🚌", color: COLORS.blue, group: L.layerGroup(), on: true, count: "–" }
@@ -327,6 +329,40 @@
         li.addEventListener("click", function () { var m = corteMarkers[li.getAttribute("data-id")]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } });
       });
     }).catch(function () { $("cortesMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; });
+  }
+
+  // ---------------------------------------------------------------- obras de conservación previstas para hoy (Ayuntamiento)
+  // Es la agenda diaria de las brigadas (pavimento, tuberías, barandillas…). Las que ya salen
+  // en «Cortes y obras» no se repiten.
+  var consMarkers = {};
+  function loadConservacion() {
+    return fetchJSON(URLS.conservacion, true).then(function (d) {
+      var g = layers.conservacion.group; g.clearLayers(); consMarkers = {};
+      var col = layers.conservacion.color, html = "", n = 0, act = 0;
+      (d.result || []).forEach(function (r) {
+        if (corteMarkers[r.id]) return;
+        var c = r.geometry && r.geometry.coordinates; if (!c) return;
+        n++; if (r.seTrabaja) act++;
+        var motivo = String(r.motivo || "").replace(/^\d+\/\d+\s*/, "").trim();
+        var dias = String(r.diasTrabajados || "").split(",").filter(Boolean);
+        var popup = "<h3>🛠️ " + esc(r.title) + '</h3><p><span class="tag" style="background:' + col + '">' + esc(motivo || "Conservación") + "</span></p><table>" +
+          (r.calle ? "<tr><td>Dirección</td><td>" + esc(r.calle) + "</td></tr>" : "") +
+          (r.inicio ? "<tr><td>Desde</td><td>" + esc(fmtFecha(r.inicio).slice(0, 10)) + "</td></tr>" : "") +
+          (dias.length ? "<tr><td>Días trabajados</td><td>" + dias.length + " (último " + esc(dias[dias.length - 1].replace(/-/g, "/")) + ")</td></tr>" : "") +
+          (r.grupoTrabajo ? "<tr><td>Brigada</td><td>" + esc(r.grupoTrabajo) + "</td></tr>" : "") +
+          "<tr><td>Hoy</td><td>" + (r.seTrabaja ? "<b>Se trabaja</b>" : "No se trabaja") + "</td></tr></table>" +
+          '<p class="muted">Agenda del día del Ayuntamiento (no es un aviso al momento) · actualizada ' + esc(fmtFecha(r.lastUpdated)) + "</p>";
+        consMarkers[r.id] = L.marker([c[1], c[0]], { icon: emojiIcon("🛠️", r.seTrabaja ? col : COLORS.gray, { size: 24 }), zIndexOffset: 200 })
+          .bindPopup(popup).bindTooltip(r.title + " · " + (motivo || "conservación")).addTo(g);
+        html += '<li data-id="' + esc(r.id) + '"><span class="tag" style="background:' + (r.seTrabaja ? col : COLORS.gray) + '">🛠️ ' + esc(motivo || "Conservación") + "</span><b>" + esc(r.title) + "</b><small>" + esc(r.calle || "") + (r.grupoTrabajo ? " · " + esc(r.grupoTrabajo) : "") + "</small></li>";
+      });
+      $("consList").innerHTML = html || "<li><small>No hay obras de conservación previstas hoy.</small></li>";
+      $("consMeta").textContent = n + " previstas hoy (" + act + " con trabajo hoy) · agenda diaria del Ayuntamiento";
+      setCount("conservacion", n);
+      Array.prototype.forEach.call($("consList").querySelectorAll("li[data-id]"), function (li) {
+        li.addEventListener("click", function () { var m = consMarkers[li.getAttribute("data-id")]; if (m) { map.setView(m.getLatLng(), 16); m.openPopup(); } });
+      });
+    }).catch(function () { $("consMeta").textContent = "No se ha podido conectar con el Ayuntamiento. Se reintentará."; setCount("conservacion", "sin conexión"); });
   }
 
   // ---------------------------------------------------------------- capa 5a: tranvía (paradas + posición estimada)
@@ -613,11 +649,11 @@
 
   renderLayerList();
   loadLineas(); loadFluidez(); loadPaneles(); loadCamZgz(); loadEventos();
-  loadTiempos(); loadDGT(); loadCamaras(); loadCortes(); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
+  loadTiempos(); loadDGT(); loadCamaras(); loadCortes().then(loadConservacion); loadTranvia(); loadPostes(); loadPatrones(); loadEstado();
   setInterval(loadTranvia, 30 * 1000);
   setInterval(loadTiempos, 2 * 60 * 1000);
   setInterval(function () { loadDGT(); loadEstado(); loadPaneles(); loadFluidez(); }, 2 * 60 * 1000);
-  setInterval(loadCortes, 5 * 60 * 1000);
+  setInterval(function () { loadCortes().then(loadConservacion); }, 5 * 60 * 1000);
   setInterval(loadEventos, 30 * 60 * 1000);
   setInterval(loadPatrones, 15 * 60 * 1000);
 })();

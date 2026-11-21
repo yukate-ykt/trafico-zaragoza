@@ -7,7 +7,7 @@
 <meta name="description" content="Mapa del tráfico de Zaragoza en tiempo real con datos abiertos del Ayuntamiento y de la DGT, e histórico de patrones.">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='9' y='2' width='14' height='28' rx='4' fill='%23222'/><circle cx='16' cy='9' r='3.5' fill='%23e5484d'/><circle cx='16' cy='16' r='3.5' fill='%23f5a524'/><circle cx='16' cy='23' r='3.5' fill='%2330a46c'/></svg>">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 </head>
 <body>
 <div id="app">
@@ -36,7 +36,7 @@
       <details class="legend"><summary>Leyenda de iconos</summary>
         <ul>
           <li>🚗💥 Accidente</li><li>⚠️ Vehículo averiado o detenido, obstáculo</li><li>🚗🚙 Afección al tráfico / retención</li>
-          <li>🚜 Obras</li><li>🚧 Corte de calle o carretera</li><li>🎟️ Evento de hoy · 🎤 evento en recinto de gran aforo</li><li>📷 Cámara DGT (pulsa para ver la imagen)</li><li>🎥 Cámara del Ayuntamiento y zona que vigila (sin imagen pública)</li>
+          <li>🚜 Obras</li><li>🛠️ Obra de conservación prevista hoy (gris: hoy no se trabaja)</li><li>🚧 Corte de calle o carretera</li><li>🎟️ Evento de hoy · 🎤 evento en recinto de gran aforo</li><li>📷 Cámara DGT (pulsa para ver la imagen)</li><li>🎥 Cámara del Ayuntamiento y zona que vigila (sin imagen pública)</li>
           <li>⏱️ Panel de tiempos de recorrido</li><li>📟 Panel luminoso de la DGT (pulsa para ver el mensaje)</li><li>🚦 Fluidez por calles (se activa si el Ayuntamiento vuelve a publicarla)</li><li>🚉 Parada de tranvía (borde verde: llega en ≤5 min, naranja ≤10, rojo más)</li>
           <li>🚋 Tranvía en marcha (posición estimada, se mueve en el mapa)</li><li>🚏 Parada de autobús (acerca el mapa para verlas)</li><li>🚌 Autobús en marcha de la línea elegida (posición estimada)</li>
         </ul>
@@ -47,6 +47,9 @@
       <h2>Eventos de hoy</h2>
       <p class="meta" id="eventosMeta">Cargando…</p>
       <ul class="list" id="eventosList"></ul>
+      <h2>Obras de conservación de hoy</h2>
+      <p class="meta" id="consMeta">Cargando…</p>
+      <ul class="list" id="consList"></ul>
       <h2>Cortes y afecciones en la ciudad</h2>
       <p class="meta" id="cortesMeta">Cargando…</p>
       <ul class="list" id="cortesList"></ul>
@@ -72,6 +75,7 @@
         <li><b>Eventos</b>: Agenda de Zaragoza del Ayuntamiento (conciertos, teatro, ferias…). Solo eventos de 3 días o menos.</li>
         <li><b>Tranvía</b>: tiempos de llegada en cada parada. En directo, cada minuto.</li>
         <li><b>Autobús</b>: tiempos de llegada en cada poste. Se consultan al pulsar sobre la parada.</li>
+        <li><b>Obras de conservación</b>: agenda diaria de las brigadas municipales (pavimento, tuberías, barandillas). Se publica una vez al día.</li>
         <li><b>Paneles luminosos</b>: mensajes de los paneles de la DGT en la Z-40 y accesos. Cada 10 minutos.</li>
       </ul>
       <h2>Qué no hay en abierto</h2>
@@ -96,6 +100,6 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>
